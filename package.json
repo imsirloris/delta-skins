@@ -13,7 +13,7 @@
     "validate": "tsx scripts/validate.ts"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12"
   },
   "dependencies": {
     "bootstrap": "^5.3.8",

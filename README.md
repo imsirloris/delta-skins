@@ -26,15 +26,15 @@ The app UI and the default skin colors use the FlipPad black matte palette: a ma
 - Three layouts: standard (every button on screen), FlipPad, or imported from an existing `.deltaskin`.
 - Canvas editor with smart guides, a grid, multi-selection, align and distribute tools, and undo/redo.
 - `extendedEdges`, CoreImage screen filters and thumbsticks.
-- Generated artwork with editable colors, or your own background image for each orientation.
-- PDF (`resizable`) or PNG (`small`/`medium`/`large`) assets.
+- Generated artwork with editable colors and an optional skin name, or your own background image for each orientation (with or without the buttons drawn over it).
+- PDF (`resizable`) or PNG (`small`/`medium`/`large`) assets, or just the `info.json` (**Download info.json**).
 - Autosave, project files, and reset buttons for colors, layout or everything.
 
 ## Getting started
 
 Open the app at <https://imsirloris.github.io/delta-skins/>. It runs entirely in your browser: nothing is uploaded, and projects autosave to your browser's storage.
 
-To run it locally you need [Node.js](https://nodejs.org) 20 or later:
+To run it locally you need [Node.js](https://nodejs.org) 22.12 or later:
 
 ```sh
 git clone https://github.com/imsirloris/delta-skins.git
@@ -79,8 +79,9 @@ Drag an element to move it, and drag the handle in its corner to resize it. Scre
 - **Guides**: while you drag, elements snap to the edges and centers of other elements and to the center of the skin. Pink lines show the alignment.
 - **Grid**: shows a grid (8pt by default). With **Snap to grid**, positions round to the grid when no guide matches.
 - **Several elements selected**: the inspector can align them (left, center, right, top, middle, bottom), distribute them horizontally or vertically (3 or more), and match their width or height.
+- **Safe area** and **Touch areas** (canvas toolbar) show or hide those overlays in the editor. They are not exported.
 - **Undo/Redo** covers positions, alignment, iPhone and console changes, inspector edits and resets. Uploaded background images are not part of the history.
-- The right panel edits inputs, labels, shapes, frames, `extendedEdges` and the CoreImage filters of each screen.
+- The right panel edits inputs, labels, shapes, frames, `extendedEdges` and the CoreImage filters of each screen. It also sets the orientation's `translucent` flag and default `extendedEdges`, and **Add button** adds a console button, a D-Pad, a thumbstick or one of Delta's buttons.
 
 ## Importing an existing skin
 
@@ -88,7 +89,7 @@ Drag an element to move it, and drag the handle in its corner to resize it. Scre
 
 - Its screens, buttons and filters are converted to the points of the selected iPhone.
 - Its artwork (a PNG, or the image inside a PDF) becomes the background.
-- Changing the iPhone converts the skin again.
+- Changing the iPhone converts the skin again. Changing the console drops the imported skin and its artwork, and starts from the standard layout.
 - The artwork already has the buttons drawn on it, so moving an element in the editor does not move the drawing.
 - Orientations that the skin doesn't have get the standard layout.
 - Skins with vector PDF artwork are not supported.
