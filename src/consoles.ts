@@ -1,9 +1,11 @@
 // Console metadata from the Delta skin docs (https://noah978.gitbook.io/delta-docs/skins).
+
+import type { ConsoleDef, ConsoleId } from './types';
 // Inputs every system accepts (Delta app actions).
 
 const CUSTOM_INPUTS = ['menu', 'quickSave', 'quickLoad', 'fastForward', 'toggleFastForward'];
 
-const CONSOLES = {
+const CONSOLES: Record<ConsoleId, ConsoleDef> = {
   gbc: {
     id: 'gbc',
     name: 'Game Boy (Color)',
@@ -65,11 +67,16 @@ const DIRECTIONAL_INPUTS = {
   touch: ['touchScreenX', 'touchScreenY'],
 };
 
-function allowedInputs(consoleId) {
+function allowedInputs(consoleId: ConsoleId): string[] {
   const c = CONSOLES[consoleId];
   const list = [...c.buttons, ...CUSTOM_INPUTS, ...DIRECTIONAL_INPUTS.dpad, ...DIRECTIONAL_INPUTS.thumbstick];
   if (c.dualScreen) list.push(...DIRECTIONAL_INPUTS.touch);
   return list;
 }
 
-export { CONSOLES, CUSTOM_INPUTS, DIRECTIONAL_INPUTS, allowedInputs };
+// Saved projects and imported skins carry the console as a plain string.
+function isConsoleId(id: unknown): id is ConsoleId {
+  return typeof id === 'string' && Object.hasOwn(CONSOLES, id);
+}
+
+export { CONSOLES, CUSTOM_INPUTS, DIRECTIONAL_INPUTS, allowedInputs, isConsoleId };

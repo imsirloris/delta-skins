@@ -2,27 +2,37 @@
 
 import JSZip from 'jszip';
 import { jsPDF } from 'jspdf';
-import { buildInfoJson, assetPlan, slug } from './skinjson.js';
-import { renderSkin, renderThumbstick } from './render.js';
+import { buildInfoJson, assetPlan, slug, type AssetPlanEntry } from './skinjson';
+import { renderSkin, renderThumbstick } from './render';
+import type { OrientationMap, ProjectState } from './types';
 
-function makeCanvas(wPt, hPt, scale) {
+type Images = OrientationMap<HTMLImageElement>;
+
+interface RenderedAsset {
+  canvas: HTMLCanvasElement;
+  wPt: number;
+  hPt: number;
+}
+
+function makeCanvas(wPt: number, hPt: number, scale: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(wPt * scale);
   canvas.height = Math.round(hPt * scale);
   const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D is not available');
   ctx.scale(canvas.width / wPt, canvas.height / hPt);
   return { canvas, ctx };
 }
 
-function canvasToBlob(canvas) {
+function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not render the PNG'))), 'image/png'),
   );
 }
 
 // PDF page sized in points, image embedded at full pixel resolution.
-function canvasToPdf(canvas, wPt, hPt) {
-    const pdf = new jsPDF({
+function canvasToPdf(canvas: HTMLCanvasElement, wPt: number, hPt: number): Blob {
+  const pdf = new jsPDF({
     orientation: wPt > hPt ? 'landscape' : 'portrait',
     unit: 'pt',
     format: [wPt, hPt],
@@ -32,7 +42,7 @@ function canvasToPdf(canvas, wPt, hPt) {
   return pdf.output('blob');
 }
 
-function renderAsset(entry, state, images) {
+function renderAsset(entry: AssetPlanEntry, state: ProjectState, images: Images): RenderedAsset {
   const scale = state.device.scale;
   if (entry.type === 'thumbstick') {
     const { width, height } = entry.item.thumbstick;
@@ -55,7 +65,7 @@ function renderAsset(entry, state, images) {
   return { canvas, wPt: width, hPt: height };
 }
 
-async function buildFiles(state, images) {
+async function buildFiles(state: ProjectState, images: Images): Promise<{ name: string; blob: Blob }[]> {
   const files = [];
   for (const entry of assetPlan(state)) {
     const { canvas, wPt, hPt } = renderAsset(entry, state, images);
@@ -67,7 +77,7 @@ async function buildFiles(state, images) {
   return files;
 }
 
-function download(blob, filename) {
+function download(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -79,14 +89,14 @@ function download(blob, filename) {
 }
 
 // Files go at the zip root (no wrapping folder), as Delta requires.
-async function exportDeltaSkin(state, images) {
+async function exportDeltaSkin(state: ProjectState, images: Images): Promise<void> {
   const zip = new JSZip();
   for (const f of await buildFiles(state, images)) zip.file(f.name, f.blob);
   const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
   download(blob, `${slug(state.name)}.deltaskin`);
 }
 
-function exportInfoJson(state) {
+function exportInfoJson(state: ProjectState): void {
   const info = buildInfoJson(state);
   download(new Blob([JSON.stringify(info, null, 2)], { type: 'application/json' }), 'info.json');
 }

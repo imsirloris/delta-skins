@@ -2,19 +2,73 @@
 // selected iPhone (points) and extracts its artwork so it can be used as the background.
 
 import JSZip from 'jszip';
-import * as Consoles from './consoles.js';
-import * as Layout from './layout.js';
+import * as Consoles from './consoles';
+import * as Layout from './layout';
+import { ORIENTATIONS } from './skinjson';
+import type {
+  ConsoleDef,
+  Device,
+  DirectionalItem,
+  Edges,
+  Frame,
+  InfoItem,
+  InfoRepresentation,
+  InfoScreen,
+  Item,
+  Orientation,
+  OrientationLayout,
+  OrientationMap,
+  Screen,
+  Size,
+  SkinInfo,
+} from './types';
 
-const ORIENTATIONS = ['portrait', 'landscape'];
+interface CoverTransform {
+  scale: number;
+  ox: number;
+  oy: number;
+}
+
+export interface ConvertedSkin {
+  consoleId: ConsoleDef['id'];
+  name: string;
+  family: string;
+  orientations: OrientationMap<OrientationLayout>;
+  // Artwork file of each orientation in the .deltaskin.
+  assets: OrientationMap<string | null>;
+  warnings: string[];
+}
+
+export interface ImportedSkin extends ConvertedSkin {
+  info: SkinInfo;
+  // Artwork as data URLs.
+  images: OrientationMap<string>;
+}
+
+// Decoded PDF image: raw samples (Flate) or the JPEG bytes as-is (DCT).
+interface PdfImage {
+  width: number;
+  height: number;
+  components?: number;
+  data?: Uint8Array<ArrayBuffer>;
+  jpeg?: Uint8Array<ArrayBuffer>;
+  mask?: PdfImage;
+}
+
+interface PdfStream {
+  dict: string;
+  start: number;
+  data: Uint8Array<ArrayBuffer>;
+}
 
 // ---- info.json -> editor state (pure) ---------------------------------------
 
-function consoleFromGameType(gameType) {
+function consoleFromGameType(gameType: string): ConsoleDef | null {
   return Object.values(Consoles.CONSOLES).find((c) => c.gameTypeIdentifier === gameType) || null;
 }
 
 // Same transform the renderer uses to cover-fit the artwork, so frames stay on the art.
-function coverTransform(from, to) {
+function coverTransform(from: Size, to: Size): CoverTransform {
   const scale = Math.max(to.width / from.width, to.height / from.height);
   return {
     scale,
@@ -23,7 +77,7 @@ function coverTransform(from, to) {
   };
 }
 
-function mapFrame(f, t, bounds) {
+function mapFrame(f: Frame, t: CoverTransform, bounds: Size): Frame {
   const x = Math.round(f.x * t.scale + t.ox);
   const y = Math.round(f.y * t.scale + t.oy);
   const width = Math.round(f.width * t.scale);
@@ -37,10 +91,11 @@ function mapFrame(f, t, bounds) {
   };
 }
 
-function mapEdges(edges, scale) {
-  const out = {};
-  for (const k of ['top', 'bottom', 'left', 'right']) {
-    if (typeof edges[k] === 'number') out[k] = Math.round(edges[k] * scale);
+function mapEdges(edges: Edges, scale: number): Edges {
+  const out: Edges = {};
+  for (const k of ['top', 'bottom', 'left', 'right'] as const) {
+    const v = edges[k];
+    if (typeof v === 'number') out[k] = Math.round(v * scale);
   }
   return out;
 }
@@ -49,24 +104,24 @@ function mapEdges(edges, scale) {
 const DEFAULT_THUMBSTICK = { width: 85, height: 87 };
 
 // Editor kind and shape of a directional (object-mapped) item.
-function directionalKind(inputs) {
+function directionalKind(inputs: Record<string, string>): Pick<DirectionalItem, 'kind' | 'shape'> {
   const values = Object.values(inputs || {});
   if (values.includes('touchScreenX')) return { kind: 'touch', shape: 'none' };
   if (values.some((v) => String(v).startsWith('analogStick'))) return { kind: 'thumbstick', shape: 'stick' };
   return { kind: 'dpad', shape: 'dpad' };
 }
 
-function convertItem(item, t, bounds, orientation) {
-  const out = {
+function convertItem(item: InfoItem, t: CoverTransform, bounds: Size, orientation: Orientation): Item {
+  const base: Pick<Item, 'id' | 'frame' | 'label' | 'shape' | 'extendedEdges'> = {
     id: Layout.newId(),
     frame: mapFrame(item.frame, t, bounds),
     label: '',
     shape: 'rect',
   };
-  if (item.extendedEdges) out.extendedEdges = mapEdges(item.extendedEdges, t.scale);
-  if (Array.isArray(item.inputs)) return { ...out, kind: 'button', inputs: [...item.inputs] };
+  if (item.extendedEdges) base.extendedEdges = mapEdges(item.extendedEdges, t.scale);
+  if (Array.isArray(item.inputs)) return { ...base, kind: 'button', inputs: [...item.inputs] };
 
-  Object.assign(out, directionalKind(item.inputs), { inputs: { ...item.inputs } });
+  const out: DirectionalItem = { ...base, ...directionalKind(item.inputs), inputs: { ...item.inputs } };
   if (out.kind !== 'thumbstick') return out;
   const size = item.thumbstick || DEFAULT_THUMBSTICK;
   out.thumbstick = {
@@ -77,20 +132,21 @@ function convertItem(item, t, bounds, orientation) {
   return out;
 }
 
-function convertScreen(screen, index, con, t, bounds) {
+function convertScreen(screen: InfoScreen, index: number, con: ConsoleDef, t: CoverTransform, bounds: Size): Screen {
   const { width, height } = con.inputFrame;
   const half = con.dualScreen ? height / 2 : height;
   const defaultInput = { x: 0, y: con.dualScreen ? index * half : 0, width, height: half };
   return {
     inputFrame: screen.inputFrame ? { ...screen.inputFrame } : defaultInput,
     outputFrame: mapFrame(screen.outputFrame, t, bounds),
-    filters: Array.isArray(screen.filters) ? JSON.parse(JSON.stringify(screen.filters)) : [],
+    filters: Array.isArray(screen.filters) ? structuredClone(screen.filters) : [],
   };
 }
 
-function convertRepresentation(rep, con, device, orientation) {
+// `from`: the representation's mappingSize.
+function convertRepresentation(rep: Partial<InfoRepresentation>, from: Size, con: ConsoleDef, device: Device, orientation: Orientation): OrientationLayout {
   const mappingSize = Layout.mappingSizeFor(device, orientation);
-  const t = coverTransform(rep.mappingSize, mappingSize);
+  const t = coverTransform(from, mappingSize);
   const items = (rep.items || []).map((item) => convertItem(item, t, mappingSize, orientation));
   const screens = (rep.screens || []).map((s, i) => convertScreen(s, i, con, t, mappingSize));
   return {
@@ -105,32 +161,35 @@ function convertRepresentation(rep, con, device, orientation) {
   };
 }
 
-function assetFile(rep) {
+function assetFile(rep: Partial<InfoRepresentation>): string | null {
   const a = rep.assets || {};
   return a.resizable || a.large || a.medium || a.small || null;
 }
 
-// Returns { consoleId, name, family, orientations: {portrait?, landscape?}, assets: {o: file}, warnings }.
-function convertInfo(info, device) {
+// info: parsed info.json of the skin (untrusted: every field is checked before use).
+function convertInfo(info: SkinInfo, device: Device): ConvertedSkin {
   const con = consoleFromGameType(info.gameTypeIdentifier);
   if (!con) throw new Error(`unknown console: ${info.gameTypeIdentifier}`);
-  const iphone = (info.representations && info.representations.iphone) || {};
-  const warnings = [];
-  let family = device.family;
+  const iphone: Record<string, Partial<Record<Orientation, Partial<InfoRepresentation>>> | undefined> =
+    (info.representations && info.representations.iphone) || {};
+  const warnings: string[] = [];
+  let family: string | undefined = device.family;
   if (!iphone[family]) {
     family = Object.keys(iphone).find((k) => iphone[k] && Object.keys(iphone[k]).length);
     if (!family) throw new Error('the skin has no iPhone representation');
     warnings.push(`The skin is "${family}" and the selected iPhone is "${device.family}"; measurements were converted anyway.`);
   }
-  const orientations = {};
-  const assets = {};
+  const reps = iphone[family] || {};
+  const orientations: OrientationMap<OrientationLayout> = {};
+  const assets: OrientationMap<string | null> = {};
   for (const o of ORIENTATIONS) {
-    const rep = iphone[family][o];
-    if (!rep || !rep.mappingSize) continue;
-    orientations[o] = convertRepresentation(rep, con, device, o);
+    const rep = reps[o];
+    const from = rep && rep.mappingSize;
+    if (!rep || !from) continue;
+    orientations[o] = convertRepresentation(rep, from, con, device, o);
     assets[o] = assetFile(rep);
     const target = Layout.mappingSizeFor(device, o);
-    const ratioFrom = rep.mappingSize.width / rep.mappingSize.height;
+    const ratioFrom = from.width / from.height;
     const ratioTo = target.width / target.height;
     if (Math.abs(ratioFrom - ratioTo) / ratioTo > 0.02) {
       warnings.push(`${o}: the skin's aspect ratio differs from the selected iPhone; the artwork was cropped to fill.`);
@@ -142,13 +201,13 @@ function convertInfo(info, device) {
 
 // ---- artwork extraction (browser) ----------------------------------------------
 
-async function inflate(bytes) {
+async function inflate(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 // Undo PNG row predictors (/Predictor >= 10).
-function unpredict(data, columns, colors) {
+function unpredict(data: Uint8Array, columns: number, colors: number): Uint8Array<ArrayBuffer> {
   const rowLen = columns * colors;
   const rows = Math.floor(data.length / (rowLen + 1));
   const out = new Uint8Array(rows * rowLen);
@@ -181,14 +240,17 @@ function unpredict(data, columns, colors) {
 
 // Minimal PDF reader: finds image XObjects (Flate or DCT), enough for skin artwork.
 class PdfImages {
-  constructor(bytes) {
+  bytes: Uint8Array<ArrayBuffer>;
+  text: string;
+
+  constructor(bytes: Uint8Array<ArrayBuffer>) {
     this.bytes = bytes;
     // windows-1252 is single-byte, so string indexes match byte offsets.
     this.text = new TextDecoder('windows-1252').decode(bytes);
   }
 
   // Dictionary text that ends right before `end` (handles nested << >>).
-  dictBefore(end) {
+  dictBefore(end: number): string {
     let depth = 0;
     for (let i = end; i > 0; i--) {
       if (this.text.startsWith('>>', i - 1)) {
@@ -203,7 +265,7 @@ class PdfImages {
     return '';
   }
 
-  resolveNumber(dict, key) {
+  resolveNumber(dict: string, key: string): number | null {
     const ref = new RegExp(`/${key}\\s+(\\d+)\\s+(\\d+)\\s+R`).exec(dict);
     if (ref) {
       const obj = new RegExp(`(?:^|\\s)${ref[1]}\\s+${ref[2]}\\s+obj\\s+(\\d+)`).exec(this.text);
@@ -213,10 +275,10 @@ class PdfImages {
     return num ? Number(num[1]) : null;
   }
 
-  streams() {
-    const out = [];
+  streams(): PdfStream[] {
+    const out: PdfStream[] = [];
     const re = />>\s*stream\r?\n/g;
-    let m;
+    let m: RegExpExecArray | null;
     while ((m = re.exec(this.text))) {
       const dict = this.dictBefore(m.index + 2);
       const length = this.resolveNumber(dict, 'Length');
@@ -226,14 +288,14 @@ class PdfImages {
     return out;
   }
 
-  async decode(stream) {
+  async decode(stream: PdfStream): Promise<PdfImage> {
     const d = stream.dict;
-    const width = Number(/\/Width\s+(\d+)/.exec(d)[1]);
-    const height = Number(/\/Height\s+(\d+)/.exec(d)[1]);
+    const width = Number((/\/Width\s+(\d+)/.exec(d) || [])[1]);
+    const height = Number((/\/Height\s+(\d+)/.exec(d) || [])[1]);
     if (/\/DCTDecode/.test(d)) return { width, height, jpeg: stream.data };
     if (!/\/FlateDecode/.test(d)) throw new Error('unsupported PDF image format');
-    if (Number((/\/BitsPerComponent\s+(\d+)/.exec(d) || [0, 8])[1]) !== 8) throw new Error('PDF image is not 8-bit');
-    let data = await inflate(stream.data);
+    if (Number((/\/BitsPerComponent\s+(\d+)/.exec(d) || [0, '8'])[1]) !== 8) throw new Error('PDF image is not 8-bit');
+    let data: Uint8Array<ArrayBuffer> = await inflate(stream.data);
     let components = Math.round(data.length / (width * height));
     const predictor = /\/Predictor\s+(\d+)/.exec(d);
     if (predictor && Number(predictor[1]) >= 10) {
@@ -247,18 +309,18 @@ class PdfImages {
   }
 
   // Object number of the "N 0 obj" that contains offset `pos`.
-  objectNumberAt(pos) {
+  objectNumberAt(pos: number): string | null {
     const head = this.text.slice(Math.max(0, pos - 4096), pos);
     const all = [...head.matchAll(/(\d+)\s+\d+\s+obj\b/g)];
     return all.length ? all[all.length - 1][1] : null;
   }
 
-  async largestImage() {
+  async largestImage(): Promise<PdfImage> {
     const images = this.streams().filter((s) => /\/Subtype\s*\/Image/.test(s.dict));
     // Soft masks are images too; skip them when picking the artwork.
-    const maskIds = new Set(images.map((s) => (/\/SMask\s+(\d+)\s+\d+\s+R/.exec(s.dict) || [])[1]).filter(Boolean));
-    const size = (s) => Number((/\/Width\s+(\d+)/.exec(s.dict) || [0, 0])[1]) * Number((/\/Height\s+(\d+)/.exec(s.dict) || [0, 0])[1]);
-    const candidates = images.filter((s) => !maskIds.has(this.objectNumberAt(s.start))).sort((a, b) => size(b) - size(a));
+    const maskIds = new Set(images.map((s) => (/\/SMask\s+(\d+)\s+\d+\s+R/.exec(s.dict) || [])[1]).filter((id): id is string => Boolean(id)));
+    const size = (s: PdfStream) => Number((/\/Width\s+(\d+)/.exec(s.dict) || [0, 0])[1]) * Number((/\/Height\s+(\d+)/.exec(s.dict) || [0, 0])[1]);
+    const candidates = images.filter((s) => !maskIds.has(this.objectNumberAt(s.start) ?? '')).sort((a, b) => size(b) - size(a));
     if (!candidates.length) throw new Error('PDF has no image (vector artwork is not supported; export the skin as PNG)');
     const main = candidates[0];
     const image = await this.decode(main);
@@ -271,7 +333,7 @@ class PdfImages {
   }
 }
 
-async function blobToImage(blob) {
+async function blobToImage(blob: Blob): Promise<HTMLImageElement> {
   const url = URL.createObjectURL(blob);
   try {
     const img = new Image();
@@ -286,15 +348,16 @@ async function blobToImage(blob) {
   }
 }
 
-async function pdfImageToDataUrl(bytes) {
+async function pdfImageToDataUrl(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   const image = await new PdfImages(bytes).largestImage();
   const canvas = document.createElement('canvas');
   canvas.width = image.width;
   canvas.height = image.height;
   const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D is not available');
   if (image.jpeg) {
     ctx.drawImage(await blobToImage(new Blob([image.jpeg], { type: 'image/jpeg' })), 0, 0);
-  } else {
+  } else if (image.data && image.components) {
     const rgba = ctx.createImageData(image.width, image.height);
     const n = image.components;
     for (let i = 0, p = 0; i < image.width * image.height; i++, p += n) {
@@ -314,40 +377,44 @@ async function pdfImageToDataUrl(bytes) {
   return canvas.toDataURL('image/png');
 }
 
-async function assetToDataUrl(zip, file) {
+async function assetToDataUrl(zip: JSZip, file: string): Promise<string> {
   const entry = zip.file(file);
   if (!entry) throw new Error(`file "${file}" is not in the .deltaskin`);
-  const bytes = await entry.async('uint8array');
+  // JSZip returns a regular ArrayBuffer-backed array; its typings only say ArrayBufferLike.
+  const bytes = (await entry.async('uint8array')) as Uint8Array<ArrayBuffer>;
   if (/\.pdf$/i.test(file)) return pdfImageToDataUrl(bytes);
   const type = /\.jpe?g$/i.test(file) ? 'image/jpeg' : 'image/png';
   const blob = new Blob([bytes], { type });
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
+    reader.onload = () => resolve(reader.result as string);
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(blob);
   });
 }
 
-// file: File/Blob of a .deltaskin. Returns convertInfo() plus { info, images: {o: dataURL} }.
-async function importDeltaSkin(file, device) {
+// file: a .deltaskin (zip).
+async function importDeltaSkin(file: Blob, device: Device): Promise<ImportedSkin> {
   const zip = await JSZip.loadAsync(file);
   const infoEntry = zip.file('info.json');
   if (!infoEntry) throw new Error('info.json not found at the root of the .deltaskin');
-  const info = JSON.parse(await infoEntry.async('string'));
-  const result = convertInfo(info, device);
-  result.info = info;
-  result.images = {};
-  for (const [o, name] of Object.entries(result.assets)) {
+  const info: SkinInfo = JSON.parse(await infoEntry.async('string'));
+  const result: ImportedSkin = { ...convertInfo(info, device), info, images: {} };
+  for (const o of ORIENTATIONS) {
+    const name = result.assets[o];
     if (!name) continue;
     try {
       result.images[o] = await assetToDataUrl(zip, name);
     } catch (err) {
-      result.warnings.push(`${o}: could not read the artwork (${err.message}); the app will draw the buttons.`);
-      result.orientations[o].drawControls = true;
+      result.warnings.push(`${o}: could not read the artwork (${errorMessage(err)}); the app will draw the buttons.`);
+      result.orientations[o]!.drawControls = true;
     }
   }
   return result;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 export { convertInfo, coverTransform, importDeltaSkin, unpredict };

@@ -2,11 +2,28 @@
 // resetting to defaults. Mutates the shared context and reports back through injected hooks,
 // so it never touches the DOM itself.
 
-import * as State from './state.js';
-import { CONSOLES } from '../consoles.js';
-import * as DeltaImporter from '../importer.js';
-import { loadImages } from './images.js';
-import { ORIENTATIONS } from '../skinjson.js';
+import * as State from './state';
+import { CONSOLES } from '../consoles';
+import * as DeltaImporter from '../importer';
+import { loadImages } from './images';
+import { ORIENTATIONS } from '../skinjson';
+import type { ConvertedSkin } from '../importer';
+import type { AppContext, ConsoleId, Device, LayoutKind, Orientation, Orientations } from '../types';
+
+// The parts of the shared context the service uses.
+type ProjectContext = Pick<AppContext, 'state' | 'ui' | 'images'>;
+
+export interface ProjectHooks {
+  render(): void;
+  save(): void;
+  // Records pending edits right away, so a reset is always its own undo step.
+  checkpoint(): void;
+  persist(): void;
+  resetHistory(): void;
+  saveView(): void;
+  notify(message: string): void;
+  ask(message: string): boolean;
+}
 
 const MESSAGES = {
   discardLayout: 'This rebuilds the layout and discards your position edits. Continue?',
@@ -18,10 +35,10 @@ const MESSAGES = {
 };
 
 class ProjectService {
-  // context: { state, ui, images }.
-  // hooks: { render, save, checkpoint, persist, resetHistory, saveView, notify(message), ask(message) → bool }
-  // `checkpoint` records pending edits right away, so a reset is always its own undo step.
-  constructor(context, hooks) {
+  context: ProjectContext;
+  hooks: ProjectHooks;
+
+  constructor(context: ProjectContext, hooks: ProjectHooks) {
     this.context = context;
     this.hooks = hooks;
   }
@@ -30,14 +47,14 @@ class ProjectService {
     return this.context.state;
   }
 
-  confirmLayoutReplace() {
+  confirmLayoutReplace(): boolean {
     return !this.state.layoutEdited || this.hooks.ask(MESSAGES.discardLayout);
   }
 
   // ---- layout ----------------------------------------------------------------
 
   // kind: 'standard' | 'flippad'; omitted keeps the current one (device/console changes).
-  relayout(kind) {
+  relayout(kind?: LayoutKind): void {
     const state = this.state;
     if (kind) state.layoutKind = kind;
     if (state.layoutKind === 'imported' && !state.importSource) state.layoutKind = 'standard';
@@ -51,13 +68,13 @@ class ProjectService {
   }
 
   // Returns false when the user keeps the current layout.
-  chooseLayout(kind) {
+  chooseLayout(kind: LayoutKind): boolean {
     if (!this.confirmLayoutReplace()) return false;
     this.relayout(kind);
     return true;
   }
 
-  changeDevice(deviceId, device) {
+  changeDevice(deviceId: string, device: Device): boolean {
     if (!this.confirmLayoutReplace()) return false;
     this.state.deviceId = deviceId;
     this.state.device = device;
@@ -66,12 +83,12 @@ class ProjectService {
     return true;
   }
 
-  updateCustomDevice(device) {
+  updateCustomDevice(device: Device): void {
     this.state.device = device;
     this.relayout();
   }
 
-  changeConsole(consoleId) {
+  changeConsole(consoleId: ConsoleId): boolean {
     if (!this.confirmLayoutReplace()) return false;
     const state = this.state;
     const previous = state.consoleId;
@@ -84,30 +101,30 @@ class ProjectService {
     return true;
   }
 
-  freshLayout(kind, consoleId) {
+  freshLayout(kind: LayoutKind, consoleId: ConsoleId): Orientations {
     return State.freshOrientations(this.state.device, consoleId, kind, this.state.orientations, (o) => this.keepsHiddenControls(o));
   }
 
   // Hidden controls only make sense over the user's own art, which survives a fresh layout.
-  keepsHiddenControls(orientation) {
+  keepsHiddenControls(orientation: Orientation): boolean {
     const importedArt = (this.state.importSource && this.state.importSource.artOrientations) || [];
     return Boolean(this.context.images[orientation]) && !importedArt.includes(orientation);
   }
 
   // Standard layout for the orientations the converted skin lacks.
-  withConverted(result) {
+  withConverted(result: ConvertedSkin): Orientations {
     return Object.assign(this.freshLayout('standard', result.consoleId), result.orientations);
   }
 
   // Imported skin re-converted to the current iPhone.
-  importedOrientations() {
-    const result = DeltaImporter.convertInfo(this.state.importSource.info, this.state.device);
+  importedOrientations(): Orientations {
+    const result = DeltaImporter.convertInfo(this.state.importSource!.info, this.state.device);
     if (result.warnings.length) this.hooks.notify(result.warnings.join(' '));
     return this.withConverted(result);
   }
 
   // Leaving an imported layout drops its artwork too: it no longer matches the frames.
-  leaveImport() {
+  leaveImport(): void {
     const source = this.state.importSource;
     if (!source) return;
     for (const orientation of source.artOrientations || []) {
@@ -117,7 +134,7 @@ class ProjectService {
     this.state.importSource = null;
   }
 
-  layoutReplaced() {
+  layoutReplaced(): void {
     this.state.layoutEdited = false;
     this.context.ui.selection = [];
     this.hooks.render();
@@ -126,12 +143,12 @@ class ProjectService {
 
   // ---- files -----------------------------------------------------------------
 
-  async reloadImages() {
+  async reloadImages(): Promise<void> {
     this.context.images = await loadImages(this.state.bgImages);
   }
 
   // Returns false when the user keeps the current layout; throws on unreadable skins.
-  async importSkin(file) {
+  async importSkin(file: File): Promise<boolean> {
     if (!this.confirmLayoutReplace()) return false;
     const state = this.state;
     const result = await DeltaImporter.importDeltaSkin(file, state.device);
@@ -140,7 +157,7 @@ class ProjectService {
     state.name = result.name;
     State.refreshIdentifier(state);
     state.layoutKind = 'imported';
-    state.importSource = { fileName: file.name, info: result.info, artOrientations: Object.keys(result.images) };
+    state.importSource = { fileName: file.name, info: result.info, artOrientations: ORIENTATIONS.filter((o) => result.images[o]) };
     state.orientations = this.withConverted(result);
     Object.assign(state.bgImages, result.images);
     this.context.ui.orientation = result.orientations.portrait ? 'portrait' : 'landscape';
@@ -150,7 +167,7 @@ class ProjectService {
     return true;
   }
 
-  async openProject(data) {
+  async openProject(data: unknown): Promise<void> {
     if (!State.isProjectData(data)) throw new Error('this file is not a project');
     this.context.state = State.restoreState(data);
     this.context.ui.selection = [];
@@ -163,13 +180,13 @@ class ProjectService {
   // ---- resets ----------------------------------------------------------------
   // Each asks first and goes through the autosave, so Undo brings the state back.
 
-  confirmReset(message) {
+  confirmReset(message: string): boolean {
     if (!this.hooks.ask(message)) return false;
     this.hooks.checkpoint();
     return true;
   }
 
-  resetColors() {
+  resetColors(): boolean {
     if (!this.confirmReset(MESSAGES.resetColors)) return false;
     this.state.style = State.defaultStyle();
     this.hooks.render();
@@ -177,14 +194,14 @@ class ProjectService {
     return true;
   }
 
-  resetLayout() {
+  resetLayout(): boolean {
     if (!this.confirmReset(MESSAGES.resetLayout)) return false;
     this.state.device = State.presetDevice(this.state);
     this.relayout();
     return true;
   }
 
-  resetAll() {
+  resetAll(): boolean {
     if (!this.confirmReset(MESSAGES.resetAll)) return false;
     const ui = this.context.ui;
     this.context.state = State.defaultState();
@@ -197,7 +214,7 @@ class ProjectService {
   }
 }
 
-function importSummary(result) {
+function importSummary(result: ConvertedSkin): string {
   const notes = [...result.warnings];
   const missing = ORIENTATIONS.filter((o) => !result.orientations[o]);
   if (missing.length) notes.push(`The skin has no ${missing.join(' or ')} layout, so the standard one is used.`);

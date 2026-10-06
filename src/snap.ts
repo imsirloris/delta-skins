@@ -1,18 +1,51 @@
 // Alignment helpers for the editor: smart guides, grid snapping, align and distribute.
 // Pure functions over frames ({x, y, width, height} in points) so Node scripts can test them.
 
-const AXES = {
+import type { Frame, Size } from './types';
+
+export type Axis = 'x' | 'y';
+export type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom';
+
+export interface Guide {
+  axis: Axis;
+  pos: number;
+  from: number;
+  to: number;
+}
+
+export interface SnapOptions {
+  threshold: number;
+  bounds: Size;
+  grid?: number; // 0 = off
+  guides?: boolean;
+  edges?: 'move' | 'resize';
+}
+
+export interface SnapResult {
+  dx: number;
+  dy: number;
+  guides: Guide[];
+}
+
+interface AxisKeys {
+  pos: 'x' | 'y';
+  size: 'width' | 'height';
+  cross: 'x' | 'y';
+  crossSize: 'width' | 'height';
+}
+
+const AXES: Record<Axis, AxisKeys> = {
   x: { pos: 'x', size: 'width', cross: 'y', crossSize: 'height' },
   y: { pos: 'y', size: 'height', cross: 'x', crossSize: 'width' },
 };
 
 // Start / center / end lines of a frame along one axis.
-function lines(f, axis) {
+function lines(f: Frame, axis: Axis): number[] {
   const { pos, size } = AXES[axis];
   return [f[pos], f[pos] + f[size] / 2, f[pos] + f[size]];
 }
 
-function boundsOf(frames) {
+function boundsOf(frames: Frame[]): Frame {
   const x = Math.min(...frames.map((f) => f.x));
   const y = Math.min(...frames.map((f) => f.y));
   const right = Math.max(...frames.map((f) => f.x + f.width));
@@ -21,14 +54,14 @@ function boundsOf(frames) {
 }
 
 // Snap one axis. Returns { delta, guide } where guide is null when nothing matched.
-function snapAxis(rect, targets, axis, opts) {
+function snapAxis(rect: Frame, targets: Frame[], axis: Axis, opts: Required<SnapOptions>): { delta: number; guide: Guide | null } {
   const moving = lines(rect, axis);
   const candidates = opts.edges === 'resize' ? [moving[2]] : moving;
-  let best = null;
+  let best: { delta: number; at: number } | null = null;
 
   if (opts.guides !== false) {
     const canvasSize = axis === 'x' ? opts.bounds.width : opts.bounds.height;
-    const targetLines = [];
+    const targetLines: { v: number; frame: Frame | null }[] = [];
     for (const t of targets) for (const v of lines(t, axis)) targetLines.push({ v, frame: t });
     for (const v of [0, canvasSize / 2, canvasSize]) targetLines.push({ v, frame: null });
 
@@ -44,23 +77,24 @@ function snapAxis(rect, targets, axis, opts) {
 
   if (best) {
     // Every target touching the snapped line contributes to the guide's extent.
-    const { cross, crossSize } = AXES[axis];
-    const snapped = { ...rect, [AXES[axis].pos]: rect[AXES[axis].pos] + best.delta };
+    const { at } = best;
+    const { pos, cross, crossSize } = AXES[axis];
+    const snapped = { ...rect, [pos]: rect[pos] + best.delta };
     let from = snapped[cross];
     let to = snapped[cross] + snapped[crossSize];
     for (const t of targets) {
-      if (lines(t, axis).some((v) => Math.abs(v - best.at) < 0.5)) {
+      if (lines(t, axis).some((v) => Math.abs(v - at) < 0.5)) {
         from = Math.min(from, t[cross]);
         to = Math.max(to, t[cross] + t[crossSize]);
       }
     }
     const canvasSize = axis === 'x' ? opts.bounds.width : opts.bounds.height;
     const canvasCross = axis === 'x' ? opts.bounds.height : opts.bounds.width;
-    if ([0, canvasSize / 2, canvasSize].some((v) => Math.abs(v - best.at) < 0.5)) {
+    if ([0, canvasSize / 2, canvasSize].some((v) => Math.abs(v - at) < 0.5)) {
       from = 0;
       to = canvasCross;
     }
-    return { delta: best.delta, guide: { axis, pos: best.at, from, to } };
+    return { delta: best.delta, guide: { axis, pos: at, from, to } };
   }
 
   if (opts.grid > 0) {
@@ -71,18 +105,17 @@ function snapAxis(rect, targets, axis, opts) {
 }
 
 // rect: frame being moved/resized. targets: frames to align against.
-// opts: { threshold, bounds: {width, height}, grid (0 = off), guides (bool), edges: 'move' | 'resize' }
-function computeSnap(rect, targets, opts) {
-  const o = { edges: 'move', grid: 0, guides: true, ...opts };
+function computeSnap(rect: Frame, targets: Frame[], opts: SnapOptions): SnapResult {
+  const o: Required<SnapOptions> = { edges: 'move', grid: 0, guides: true, ...opts };
   const x = snapAxis(rect, targets, 'x', o);
   const y = snapAxis(rect, targets, 'y', o);
-  return { dx: x.delta, dy: y.delta, guides: [x.guide, y.guide].filter(Boolean) };
+  return { dx: x.delta, dy: y.delta, guides: [x.guide, y.guide].filter((g) => g !== null) };
 }
 
 // Mutates frames so they share an edge or center with `reference` (default: the selection's
 // bounding box). Pass the box from before the first align so repeated clicks keep working
 // once same-sized frames are stacked.
-function alignFrames(frames, mode, reference) {
+function alignFrames(frames: Frame[], mode: AlignMode, reference?: Frame | null): void {
   const b = reference || boundsOf(frames);
   for (const f of frames) {
     if (mode === 'left') f.x = b.x;
@@ -95,7 +128,7 @@ function alignFrames(frames, mode, reference) {
 }
 
 // Equal gaps between frames along an axis; the first and last frames stay put.
-function distributeFrames(frames, axis) {
+function distributeFrames(frames: Frame[], axis: Axis): void {
   if (frames.length < 3) return;
   const { pos, size } = AXES[axis];
   const sorted = [...frames].sort((a, b) => a[pos] - b[pos]);

@@ -1,19 +1,24 @@
 #!/usr/bin/env node
 // Validates a .deltaskin (zip) or an info.json against the Delta skin spec.
-// Usage: node scripts/validate.js <file.deltaskin|info.json> [...]
+// Usage: npm run validate -- <file.deltaskin|info.json> [...]
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { pathToFileURL } from 'node:url';
-import { CONSOLES, allowedInputs } from '../src/consoles.js';
+import { CONSOLES, allowedInputs } from '../src/consoles';
+
+export interface Report {
+  errors: string[];
+  warnings: string[];
+}
 
 // Minimal zip reader (central directory + stored/deflate entries).
-function readZip(buffer) {
+function readZip(buffer: Buffer): Record<string, () => Buffer> {
   const eocd = buffer.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
   if (eocd < 0) throw new Error('not a zip file');
   const count = buffer.readUInt16LE(eocd + 10);
   let offset = buffer.readUInt32LE(eocd + 16);
-  const files = {};
+  const files: Record<string, () => Buffer> = {};
   for (let i = 0; i < count; i++) {
     const method = buffer.readUInt16LE(offset + 10);
     const compSize = buffer.readUInt32LE(offset + 20);
@@ -32,11 +37,12 @@ function readZip(buffer) {
   return files;
 }
 
-function validateInfo(info, fileNames) {
-  const errors = [];
-  const warnings = [];
-  const err = (m) => errors.push(m);
-  const warn = (m) => warnings.push(m);
+// info: parsed info.json. It is untrusted, so it stays untyped and every field is checked.
+function validateInfo(info: any, fileNames: Set<string> | null): Report {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const err = (m: string) => errors.push(m);
+  const warn = (m: string) => warnings.push(m);
 
   for (const key of ['name', 'identifier', 'gameTypeIdentifier', 'representations']) {
     if (info[key] === undefined) err(`missing top-level key "${key}"`);
@@ -49,11 +55,11 @@ function validateInfo(info, fileNames) {
   const allowed = new Set(allowedInputs(con.id));
   const reps = info.representations || {};
 
-  for (const [deviceType, families] of Object.entries(reps)) {
+  for (const [deviceType, families] of Object.entries<any>(reps)) {
     if (!['iphone', 'ipad'].includes(deviceType)) err(`unknown device "${deviceType}"`);
-    for (const [family, orients] of Object.entries(families)) {
+    for (const [family, orients] of Object.entries<any>(families)) {
       if (!['standard', 'edgeToEdge', 'splitView'].includes(family)) err(`unknown family "${family}"`);
-      for (const [orientation, rep] of Object.entries(orients)) {
+      for (const [orientation, rep] of Object.entries<any>(orients)) {
         const where = `${deviceType}.${family}.${orientation}`;
         if (!['portrait', 'landscape'].includes(orientation)) err(`${where}: unknown orientation`);
         const ms = rep.mappingSize;
@@ -65,13 +71,13 @@ function validateInfo(info, fileNames) {
         if (orientation === 'landscape' && ms.width < ms.height) warn(`${where}: landscape mappingSize is taller than wide`);
 
         const assets = rep.assets || {};
-        const names = assets.resizable ? [assets.resizable] : [assets.small, assets.medium, assets.large];
+        const names: (string | undefined)[] = assets.resizable ? [assets.resizable] : [assets.small, assets.medium, assets.large];
         if (!assets.resizable && names.some((n) => !n)) err(`${where}: assets needs "resizable" or small/medium/large`);
-        for (const n of names.filter(Boolean)) {
+        for (const n of names.filter((name) => name !== undefined)) {
           if (fileNames && !fileNames.has(n)) err(`${where}: asset "${n}" not in archive`);
         }
 
-        const inBounds = (f, label) => {
+        const inBounds = (f: any, label: string) => {
           if (!f || [f.x, f.y, f.width, f.height].some((v) => typeof v !== 'number')) {
             err(`${where}: ${label} frame invalid`);
             return;
@@ -81,11 +87,11 @@ function validateInfo(info, fileNames) {
           }
         };
 
-        for (const [i, item] of (rep.items || []).entries()) {
+        for (const [i, item] of (rep.items || []).entries() as [number, any][]) {
           const label = `item ${i} (${JSON.stringify(item.inputs)})`;
-          const inputs = Array.isArray(item.inputs) ? item.inputs : Object.values(item.inputs || {});
+          const inputs: unknown[] = Array.isArray(item.inputs) ? item.inputs : Object.values(item.inputs || {});
           if (!inputs.length) err(`${where}: ${label} has no inputs`);
-          for (const input of inputs) if (!allowed.has(input)) err(`${where}: ${label} input "${input}" not valid for ${con.name}`);
+          for (const input of inputs) if (typeof input !== 'string' || !allowed.has(input)) err(`${where}: ${label} input "${input}" not valid for ${con.name}`);
           inBounds(item.frame, label);
           if (item.thumbstick) {
             if (fileNames && !fileNames.has(item.thumbstick.name)) err(`${where}: thumbstick "${item.thumbstick.name}" not in archive`);
@@ -93,7 +99,7 @@ function validateInfo(info, fileNames) {
           }
         }
 
-        const screens = rep.screens || [];
+        const screens: any[] = rep.screens || [];
         if (!screens.length) warn(`${where}: no screens`);
         for (const [i, s] of screens.entries()) {
           inBounds(s.outputFrame, `screen ${i} outputFrame`);
@@ -106,7 +112,7 @@ function validateInfo(info, fileNames) {
           }
         }
         if (con.dualScreen) {
-          const touch = (rep.items || []).find((it) => it.inputs && it.inputs.x === 'touchScreenX');
+          const touch = (rep.items || []).find((it: any) => it.inputs && it.inputs.x === 'touchScreenX');
           if (!touch) warn(`${where}: DS skin without touch screen item`);
           else if (screens[1] && JSON.stringify(touch.frame) !== JSON.stringify(screens[1].outputFrame)) {
             warn(`${where}: touch item frame does not match bottom screen outputFrame`);
@@ -118,10 +124,10 @@ function validateInfo(info, fileNames) {
   return { errors, warnings };
 }
 
-function validateFile(file) {
+function validateFile(file: string): Report {
   const buffer = fs.readFileSync(file);
   let info;
-  let fileNames = null;
+  let fileNames: Set<string> | null = null;
   if (path.extname(file) === '.json') {
     info = JSON.parse(buffer.toString('utf8'));
   } else {
@@ -138,7 +144,7 @@ export { validateInfo, readZip };
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const files = process.argv.slice(2);
   if (!files.length) {
-    console.error('usage: node scripts/validate.js <file.deltaskin|info.json> [...]');
+    console.error('usage: npm run validate -- <file.deltaskin|info.json> [...]');
     process.exit(2);
   }
   let failed = false;

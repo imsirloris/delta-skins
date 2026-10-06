@@ -1,10 +1,14 @@
 // iPhone display presets.
 // Resolutions from https://iosref.com/res (logical points, scale, physical pixels).
 // Safe-area insets are approximations (points) and can be edited in the UI.
+
+import type { Device, DeviceFamily } from './types';
+
+type DeviceRow = [id: string, name: string, w: number, h: number, scale: number, pixelW: number, pixelH: number, family: DeviceFamily, safeTop: number];
 // safeTop = status bar / notch / Dynamic Island inset in portrait.
 // Home indicator inset is 34pt portrait / 21pt landscape on every edge-to-edge iPhone.
 
-const RAW = [
+const RAW: DeviceRow[] = [
   // id, name, w, h, scale, pixelW, pixelH, family, safeTop
   ['iphone-17-pro-max', 'iPhone 17 Pro Max / 16 Pro Max (6.9")', 440, 956, 3, 1320, 2868, 'edgeToEdge', 62],
   ['iphone-air', 'iPhone Air (6.5")', 420, 912, 3, 1260, 2736, 'edgeToEdge', 62],
@@ -22,7 +26,7 @@ const RAW = [
   ['iphone-se1', 'iPhone SE (1st gen) / 5s / 5c / 5 (4")', 320, 568, 2, 640, 1136, 'standard', 0],
 ];
 
-function makeDevice(id, name, w, h, scale, pixelW, pixelH, family, safeTop) {
+function makeDevice(...[id, name, w, h, scale, pixelW, pixelH, family, safeTop]: DeviceRow): Device {
   const edge = family === 'edgeToEdge';
   return {
     id,
@@ -40,15 +44,15 @@ function makeDevice(id, name, w, h, scale, pixelW, pixelH, family, safeTop) {
 
 const DEVICES = RAW.map((row) => makeDevice(...row));
 
-function getDevice(id) {
+function getDevice(id: string): Device | null {
   const device = DEVICES.find((d) => d.id === id);
-  return device ? JSON.parse(JSON.stringify(device)) : null;
+  return device ? structuredClone(device) : null;
 }
 
 // Custom devices default to a typical notch inset when edge-to-edge.
 const CUSTOM_SAFE_TOP = 59;
 
-function customDevice(w, h, scale, family, safeTop = family === 'edgeToEdge' ? CUSTOM_SAFE_TOP : 0) {
+function customDevice(w: number, h: number, scale: number, family: DeviceFamily, safeTop = family === 'edgeToEdge' ? CUSTOM_SAFE_TOP : 0): Device {
   return makeDevice('custom', 'Custom', w, h, scale, Math.round(w * scale), Math.round(h * scale), family, safeTop);
 }
 

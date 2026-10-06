@@ -1,11 +1,19 @@
 // Canvas editor: preview, multi-selection, drag-to-move with smart guides/grid, marquee
 // selection, corner-resize and keyboard nudging. Overlay drawing lives in editor-overlays.js.
 
-import { renderSkin } from './render.js';
-import { computeSnap, boundsOf } from './snap.js';
-import { refKey, containsRef, toggleRef, resolveRef, selectableRefs } from './refs.js';
-import * as Overlays from './editor-overlays.js';
-import { flipPadCoverTop } from './layout.js';
+import { renderSkin } from './render';
+import { computeSnap, boundsOf, type Guide, type SnapOptions } from './snap';
+import { refKey, containsRef, toggleRef, resolveRef, selectableRefs } from './refs';
+import * as Overlays from './editor-overlays';
+import { flipPadCoverTop } from './layout';
+import type { AppContext, Frame, OrientationLayout, Point, Ref, Size } from './types';
+
+type Drag =
+  | { mode: 'move'; start: Point; origs: { f: Frame; orig: Frame }[]; bounds: Frame }
+  | { mode: 'resize'; start: Point; orig: Frame }
+  | { mode: 'marquee'; start: Point; current: Point; base: Ref[] };
+
+type Modifiers = Pick<MouseEvent, 'shiftKey' | 'ctrlKey' | 'metaKey'>;
 
 const SNAP_PX = 6; // snap distance in screen pixels
 const MIN_SIZE = 8; // smallest frame side when resizing (points)
@@ -14,22 +22,26 @@ const NUDGE_FAST = 10; // Shift+arrow step without grid snapping
 const CANVAS_MARGIN = 24; // screen pixels kept free around the canvas
 const CHECKER_PX = 12;
 const ROUND_SHAPES = ['circle', 'dpad', 'stick'];
-const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
-const isAdditive = (e) => e.shiftKey || e.ctrlKey || e.metaKey;
-const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-const intersects = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+const isAdditive = (e: Modifiers) => e.shiftKey || e.ctrlKey || e.metaKey;
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const intersects = (a: Frame, b: Frame) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
 class Editor {
-  // app: { state, ui, images, current(), select(refs), changed(opts), removeSelected() }
-  constructor(canvas, wrap, app) {
+  canvas: HTMLCanvasElement;
+  wrap: HTMLElement;
+  app: AppContext;
+  // Screen pixels per point.
+  viewScale = 1;
+  drag: Drag | null = null;
+  guides: Guide[] = [];
+  onCursor: ((p: Point) => void) | null = null;
+
+  constructor(canvas: HTMLCanvasElement, wrap: HTMLElement, app: AppContext) {
     this.canvas = canvas;
     this.wrap = wrap;
     this.app = app;
-    this.viewScale = 1;
-    this.drag = null;
-    this.guides = [];
-    this.onCursor = null;
 
     canvas.addEventListener('pointerdown', (e) => this.pointerDown(e));
     canvas.addEventListener('pointermove', (e) => this.pointerMove(e));
@@ -41,39 +53,40 @@ class Editor {
 
   // ---- geometry -------------------------------------------------------
 
-  toPoints(e) {
+  toPoints(e: MouseEvent): Point {
     const rect = this.canvas.getBoundingClientRect();
     return { x: (e.clientX - rect.left) / this.viewScale, y: (e.clientY - rect.top) / this.viewScale };
   }
 
-  frameOf(ref) {
+  frameOf(ref: Ref): Frame | null {
     const resolved = resolveRef(this.app.current(), ref);
     return resolved ? resolved.frame : null;
   }
 
-  selection() {
+  selection(): Ref[] {
     return this.app.ui.selection || [];
   }
 
-  selectedFrames() {
-    return this.selection().map((r) => this.frameOf(r)).filter(Boolean);
+  selectedFrames(): Frame[] {
+    return this.selection().map((r) => this.frameOf(r)).filter((f) => f !== null);
   }
 
   // Single selected frame (resize handle only exists then).
-  singleFrame() {
+  singleFrame(): Frame | null {
     const frames = this.selectedFrames();
     return frames.length === 1 ? frames[0] : null;
   }
 
   // Frames to align against: everything not being dragged.
-  snapTargets() {
+  snapTargets(): Frame[] {
     const selection = this.selection();
     return selectableRefs(this.app.current())
       .filter((r) => !containsRef(selection, r))
-      .map((r) => this.frameOf(r));
+      .map((r) => this.frameOf(r))
+      .filter((f) => f !== null);
   }
 
-  hitHandle(p) {
+  hitHandle(p: Point): boolean {
     const f = this.singleFrame();
     if (!f) return false;
     const tolerance = Overlays.HANDLE_SIZE / this.viewScale;
@@ -81,9 +94,9 @@ class Editor {
   }
 
   // Topmost element under the point: buttons first (drawn on top), then screens.
-  hitTest(p) {
+  hitTest(p: Point): Ref | null {
     const orient = this.app.current();
-    const inside = (f) => p.x >= f.x && p.x <= f.x + f.width && p.y >= f.y && p.y <= f.y + f.height;
+    const inside = (f: Frame) => p.x >= f.x && p.x <= f.x + f.width && p.y >= f.y && p.y <= f.y + f.height;
     const item = [...orient.items].reverse().find((i) => i.kind !== 'touch' && inside(i.frame));
     if (item) return { type: 'item', id: item.id };
     const index = orient.screens.map((s) => s.outputFrame).findLastIndex(inside);
@@ -91,7 +104,7 @@ class Editor {
   }
 
   // null when snapping is off (Alt held, or neither guides nor grid snapping enabled).
-  snapOptions(e, edges) {
+  snapOptions(e: MouseEvent, edges: SnapOptions['edges']): SnapOptions | null {
     const ui = this.app.ui;
     const guides = ui.guides !== false;
     const grid = ui.grid && ui.grid.snap ? ui.grid.size : 0;
@@ -107,14 +120,15 @@ class Editor {
 
   // ---- pointer interaction --------------------------------------------
 
-  pointerDown(e) {
+  pointerDown(e: PointerEvent): void {
     if (!this.app.current()) return;
     this.canvas.focus();
     const p = this.toPoints(e);
     const additive = isAdditive(e);
 
-    if (!additive && this.hitHandle(p)) {
-      this.beginDrag(e, { mode: 'resize', start: p, orig: { ...this.singleFrame() } });
+    const single = this.singleFrame();
+    if (!additive && single && this.hitHandle(p)) {
+      this.beginDrag(e, { mode: 'resize', start: p, orig: { ...single } });
       return;
     }
     const hit = this.hitTest(p);
@@ -129,37 +143,38 @@ class Editor {
     this.beginMarquee(e, p, additive);
   }
 
-  beginDrag(e, drag) {
+  beginDrag(e: PointerEvent, drag: Drag): void {
     this.drag = drag;
     this.canvas.setPointerCapture(e.pointerId);
   }
 
-  beginMove(e, p, hit) {
+  beginMove(e: PointerEvent, p: Point, hit: Ref): void {
     if (!containsRef(this.selection(), hit)) this.app.select([hit]);
     const frames = this.selectedFrames();
     this.beginDrag(e, { mode: 'move', start: p, origs: frames.map((f) => ({ f, orig: { ...f } })), bounds: boundsOf(frames) });
   }
 
-  beginMarquee(e, p, additive) {
+  beginMarquee(e: PointerEvent, p: Point, additive: boolean): void {
     const base = additive ? [...this.selection()] : [];
     if (!additive) this.app.select([]);
     this.beginDrag(e, { mode: 'marquee', start: p, current: p, base });
   }
 
-  pointerMove(e) {
+  pointerMove(e: PointerEvent): void {
     const p = this.toPoints(e);
     if (this.onCursor) this.onCursor(p);
-    if (!this.drag) {
+    const drag = this.drag;
+    if (!drag) {
       this.canvas.style.cursor = this.hitHandle(p) ? 'nwse-resize' : this.hitTest(p) ? 'move' : 'default';
       return;
     }
-    if (this.drag.mode === 'move') this.dragMove(p, e);
-    else if (this.drag.mode === 'resize') this.dragResize(p, e);
-    else this.dragMarquee(p);
+    if (drag.mode === 'move') this.dragMove(drag, p, e);
+    else if (drag.mode === 'resize') this.dragResize(drag, p, e);
+    else this.dragMarquee(drag, p);
   }
 
-  dragMove(p, e) {
-    const { start, origs, bounds } = this.drag;
+  dragMove(drag: Drag & { mode: 'move' }, p: Point, e: PointerEvent): void {
+    const { start, origs, bounds } = drag;
     const ms = this.app.current().mappingSize;
     let dx = p.x - start.x;
     let dy = p.y - start.y;
@@ -181,9 +196,10 @@ class Editor {
     this.app.changed({ geometryOnly: true });
   }
 
-  dragResize(p, e) {
+  dragResize(drag: Drag & { mode: 'resize' }, p: Point, e: PointerEvent): void {
     const frame = this.singleFrame();
-    const { orig, start } = this.drag;
+    if (!frame) return;
+    const { orig, start } = drag;
     const ms = this.app.current().mappingSize;
     const dx = Math.round(p.x - start.x);
     const dy = Math.round(p.y - start.y);
@@ -197,7 +213,7 @@ class Editor {
   }
 
   // Resize keeping the original ratio; null when the result would leave the skin.
-  aspectResize(orig, dx, dy, ms) {
+  aspectResize(orig: Frame, dx: number, dy: number, ms: Size): Size | null {
     this.guides = [];
     const ratio = orig.width / orig.height;
     let width = clamp(orig.width + dx, MIN_SIZE, ms.width - orig.x);
@@ -208,7 +224,7 @@ class Editor {
     return { width, height };
   }
 
-  snappedResize(orig, dx, dy, ms, e) {
+  snappedResize(orig: Frame, dx: number, dy: number, ms: Size, e: PointerEvent): Size {
     this.guides = [];
     let width = clamp(orig.width + dx, MIN_SIZE, ms.width - orig.x);
     let height = clamp(orig.height + dy, MIN_SIZE, ms.height - orig.y);
@@ -221,17 +237,19 @@ class Editor {
     return { width, height };
   }
 
-  dragMarquee(p) {
-    this.drag.current = p;
-    const box = this.marqueeRect();
-    const base = this.drag.base;
-    const hits = selectableRefs(this.app.current()).filter((r) => intersects(this.frameOf(r), box));
+  dragMarquee(drag: Drag & { mode: 'marquee' }, p: Point): void {
+    drag.current = p;
+    const box = this.marqueeRect(drag);
+    const base = drag.base;
+    const hits = selectableRefs(this.app.current()).filter((r) => {
+      const frame = this.frameOf(r);
+      return frame !== null && intersects(frame, box);
+    });
     const baseKeys = new Set(base.map(refKey));
     this.app.select([...base, ...hits.filter((r) => !baseKeys.has(refKey(r)))]);
   }
 
-  marqueeRect() {
-    const { start, current } = this.drag;
+  marqueeRect({ start, current }: Drag & { mode: 'marquee' }): Frame {
     return {
       x: Math.min(start.x, current.x),
       y: Math.min(start.y, current.y),
@@ -241,7 +259,7 @@ class Editor {
   }
 
   // Screens and round buttons keep their aspect ratio (unless Shift), others only with Shift.
-  keepAspect(e) {
+  keepAspect(e: Modifiers): boolean {
     const selection = this.selection();
     if (selection.length !== 1) return false;
     const resolved = resolveRef(this.app.current(), selection[0]);
@@ -249,7 +267,7 @@ class Editor {
     return (selection[0].type === 'screen' || isRound) !== e.shiftKey;
   }
 
-  pointerUp(e) {
+  pointerUp(e: PointerEvent): void {
     if (!this.drag) return;
     const mode = this.drag.mode;
     this.drag = null;
@@ -261,7 +279,7 @@ class Editor {
 
   // ---- keyboard ---------------------------------------------------------
 
-  keyDown(e) {
+  keyDown(e: KeyboardEvent): void {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
       e.preventDefault();
       this.app.select(selectableRefs(this.app.current()).filter((r) => r.type === 'item'));
@@ -284,14 +302,14 @@ class Editor {
     }
   }
 
-  nudgeStep(e) {
+  nudgeStep(e: KeyboardEvent): number {
     if (!e.shiftKey) return NUDGE;
     const grid = this.app.ui.grid;
     return grid && grid.snap ? grid.size : NUDGE_FAST;
   }
 
   // Moves the frames as a group, never past the skin's edges.
-  nudge(frames, [dirX, dirY], step) {
+  nudge(frames: Frame[], [dirX, dirY]: [number, number], step: number): void {
     const ms = this.app.current().mappingSize;
     const b = boundsOf(frames);
     const dx = clamp(dirX * step, -b.x, ms.width - (b.x + b.width));
@@ -306,7 +324,7 @@ class Editor {
   // ---- drawing --------------------------------------------------------
 
   // Sizes the canvas to fit the stage and returns the device-pixel ratio used.
-  fitCanvas(mappingSize) {
+  fitCanvas(mappingSize: Size): number {
     const availW = this.wrap.clientWidth - CANVAS_MARGIN;
     const availH = this.wrap.clientHeight - CANVAS_MARGIN;
     this.viewScale = Math.max(0.1, Math.min(availW / mappingSize.width, availH / mappingSize.height));
@@ -320,11 +338,12 @@ class Editor {
     return dpr;
   }
 
-  render() {
+  render(): void {
     const orient = this.app.current();
     if (!orient) return;
     const dpr = this.fitCanvas(orient.mappingSize);
     const ctx = this.canvas.getContext('2d');
+    if (!ctx) return;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     Overlays.drawChecker(ctx, this.canvas.width, this.canvas.height, CHECKER_PX * dpr);
     const scale = this.viewScale * dpr;
@@ -343,7 +362,7 @@ class Editor {
     this.drawOverlays(ctx, orient);
   }
 
-  drawOverlays(ctx, orient) {
+  drawOverlays(ctx: CanvasRenderingContext2D, orient: OrientationLayout): void {
     const { state, ui } = this.app;
     const ms = orient.mappingSize;
     const vs = this.viewScale;
@@ -356,7 +375,7 @@ class Editor {
     if (ui.showDebug) Overlays.drawTouchAreas(ctx, orient, vs);
     Overlays.drawSelection(ctx, this.selectedFrames(), vs);
     Overlays.drawGuides(ctx, this.guides, vs);
-    if (this.drag && this.drag.mode === 'marquee') Overlays.drawMarquee(ctx, this.marqueeRect(), vs);
+    if (this.drag && this.drag.mode === 'marquee') Overlays.drawMarquee(ctx, this.marqueeRect(this.drag), vs);
   }
 }
 

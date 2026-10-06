@@ -2,7 +2,22 @@
 // scaled (points -> pixels) by the caller. Loads in Node too (for DEFAULT_STYLE) since nothing
 // touches the DOM until a draw call.
 
-const DEFAULT_STYLE = {
+import type { Frame, Item, Orientation, OrientationLayout, Style } from './types';
+
+type Ctx = CanvasRenderingContext2D;
+type Icon = (ctx: Ctx) => void;
+
+export interface RenderOptions {
+  orient: OrientationLayout;
+  orientation: Orientation;
+  style?: Partial<Style>;
+  bgImage?: CanvasImageSource & { width: number; height: number } | null;
+  drawControls?: boolean;
+  forExport?: boolean;
+  title?: string;
+}
+
+const DEFAULT_STYLE: Style = {
   bg: '#181818',
   bg2: '#101010',
   bezel: '#0b0b0b',
@@ -15,7 +30,7 @@ const DEFAULT_STYLE = {
 const ACCENT_INPUTS = new Set(['a', 'b', 'x', 'y', 'c', 'z']);
 const BEZEL_PAD = 6;
 
-function roundRect(ctx, x, y, w, h, r) {
+function roundRect(ctx: Ctx, x: number, y: number, w: number, h: number, r: number): void {
   const radius = Math.max(0, Math.min(r, w / 2, h / 2));
   ctx.beginPath();
   ctx.moveTo(x + radius, y);
@@ -26,16 +41,16 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function shade(hex, amount) {
+function shade(hex: string, amount: number): string {
   const n = parseInt(hex.slice(1), 16);
-  const clamp = (v) => Math.max(0, Math.min(255, v));
+  const clamp = (v: number) => Math.max(0, Math.min(255, v));
   const r = clamp((n >> 16) + amount);
   const g = clamp(((n >> 8) & 0xff) + amount);
   const b = clamp((n & 0xff) + amount);
   return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
 }
 
-function label(ctx, text, cx, cy, size, color) {
+function label(ctx: Ctx, text: string, cx: number, cy: number, size: number, color: string): void {
   if (!text) return;
   ctx.fillStyle = color;
   ctx.font = `700 ${size}px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
@@ -44,7 +59,7 @@ function label(ctx, text, cx, cy, size, color) {
   ctx.fillText(text, cx, cy + size * 0.04);
 }
 
-function drawDpad(ctx, f, style) {
+function drawDpad(ctx: Ctx, f: Frame, style: Style): void {
   const arm = Math.min(f.width, f.height) / 3;
   const cx = f.x + f.width / 2;
   const cy = f.y + f.height / 2;
@@ -63,7 +78,7 @@ function drawDpad(ctx, f, style) {
   ctx.fillRect(cx - arm / 2 + 1, cy - arm / 2 + 1, arm - 2, arm - 2);
   ctx.fillStyle = style.text;
   const t = arm * 0.22;
-  const tri = (x1, y1, x2, y2, x3, y3) => {
+  const tri = (x1: number, y1: number, x2: number, y2: number, x3: number, y3: number) => {
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
@@ -78,7 +93,7 @@ function drawDpad(ctx, f, style) {
   tri(cx + off + t, cy, cx + off - t * 0.6, cy - t, cx + off - t * 0.6, cy + t);
 }
 
-function drawStickBase(ctx, f, style) {
+function drawStickBase(ctx: Ctx, f: Frame, style: Style): void {
   const cx = f.x + f.width / 2;
   const cy = f.y + f.height / 2;
   const r = Math.min(f.width, f.height) / 2;
@@ -98,12 +113,12 @@ function drawStickBase(ctx, f, style) {
 }
 
 // Wide-tracked uppercase label (FlipPad style: MENU / SAVE / LOAD / FFW), no button body.
-function drawTextButton(ctx, item, style) {
+function drawTextButton(ctx: Ctx, item: Item, style: Style): void {
   const f = item.frame;
   const text = item.label || '';
   if (!text) return;
   let size = f.height * 0.45;
-  const font = (px) => `800 ${px}px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
+  const font = (px: number) => `800 ${px}px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
   const tracking = 0.32;
   const measure = () => {
     ctx.font = font(size);
@@ -129,7 +144,7 @@ function drawTextButton(ctx, item, style) {
   ctx.restore();
 }
 
-function buttonPath(ctx, item) {
+function buttonPath(ctx: Ctx, item: Item): void {
   const f = item.frame;
   if (item.shape === 'circle') {
     ctx.beginPath();
@@ -140,7 +155,7 @@ function buttonPath(ctx, item) {
   roundRect(ctx, f.x, f.y, f.width, f.height, radius);
 }
 
-function drawButton(ctx, item, style) {
+function drawButton(ctx: Ctx, item: Item, style: Style): void {
   if (item.shape === 'text') return drawTextButton(ctx, item, style);
   const f = item.frame;
   const input = Array.isArray(item.inputs) ? item.inputs[0] : '';
@@ -162,7 +177,7 @@ function drawButton(ctx, item, style) {
 // ---- icons for Delta's app buttons ----------------------------------------
 // Drawn on a 24×24 grid centered at (0, 0), stroked/filled with the text color.
 
-function arrowHead(ctx, x, y, dx, dy, size) {
+function arrowHead(ctx: Ctx, x: number, y: number, dx: number, dy: number, size: number): void {
   const px = -dy;
   const py = dx;
   ctx.beginPath();
@@ -173,7 +188,7 @@ function arrowHead(ctx, x, y, dx, dy, size) {
   ctx.fill();
 }
 
-function doubleTriangle(ctx, cy, scale) {
+function doubleTriangle(ctx: Ctx, cy: number, scale: number): void {
   const s = scale;
   ctx.beginPath();
   ctx.moveTo(-10 * s, cy - 7 * s);
@@ -189,7 +204,7 @@ function doubleTriangle(ctx, cy, scale) {
   ctx.stroke();
 }
 
-const ICONS = {
+const ICONS: Record<string, Icon> = {
   // Hamburger.
   menu(ctx) {
     ctx.beginPath();
@@ -252,13 +267,13 @@ const ICONS = {
 // Labels older projects stored for these buttons; treat them as "use the icon".
 const LEGACY_ICON_LABELS = new Set(['≡', 'QS', 'QL', '»', '»|']);
 
-function iconFor(item) {
+function iconFor(item: Item): Icon | null {
   const input = Array.isArray(item.inputs) && item.inputs.length === 1 ? item.inputs[0] : null;
   if (!input || !ICONS[input]) return null;
   return !item.label || LEGACY_ICON_LABELS.has(item.label) ? ICONS[input] : null;
 }
 
-function drawIcon(ctx, icon, cx, cy, size, color) {
+function drawIcon(ctx: Ctx, icon: Icon, cx: number, cy: number, size: number, color: string): void {
   ctx.save();
   ctx.translate(cx, cy);
   ctx.scale(size / 24, size / 24);
@@ -270,7 +285,7 @@ function drawIcon(ctx, icon, cx, cy, size, color) {
   ctx.restore();
 }
 
-function drawItem(ctx, item, style) {
+function drawItem(ctx: Ctx, item: Item, style: Style): void {
   if (item.kind === 'touch') return;
   if (item.kind === 'dpad') drawDpad(ctx, item.frame, style);
   else if (item.kind === 'thumbstick') drawStickBase(ctx, item.frame, style);
@@ -278,12 +293,12 @@ function drawItem(ctx, item, style) {
 }
 
 // First free horizontal band below the screens where the skin name fits without touching a control.
-function findTitleY(orient, W, H) {
+function findTitleY(orient: OrientationLayout, W: number, H: number): number | null {
   const bandW = 160;
   const bandH = 16;
   const x0 = (W - bandW) / 2;
   const start = Math.max(...orient.screens.map((s) => s.outputFrame.y + s.outputFrame.height)) + 10;
-  const hits = (y) =>
+  const hits = (y: number) =>
     orient.items.some((i) => {
       const f = i.frame;
       return i.kind !== 'touch' && f.x < x0 + bandW && x0 < f.x + f.width && f.y < y + bandH && y < f.y + f.height;
@@ -294,7 +309,7 @@ function findTitleY(orient, W, H) {
   return null;
 }
 
-function drawCover(ctx, img, w, h) {
+function drawCover(ctx: Ctx, img: NonNullable<RenderOptions['bgImage']>, w: number, h: number): void {
   const scale = Math.max(w / img.width, h / img.height);
   const dw = img.width * scale;
   const dh = img.height * scale;
@@ -302,7 +317,7 @@ function drawCover(ctx, img, w, h) {
 }
 
 // Gradient background, screen bezels and the skin name (portrait without a custom image).
-function drawGeneratedArt(ctx, orient, style, title) {
+function drawGeneratedArt(ctx: Ctx, orient: OrientationLayout, style: Style, title?: string): void {
   const W = orient.mappingSize.width;
   const H = orient.mappingSize.height;
   const grad = ctx.createLinearGradient(0, 0, 0, H);
@@ -322,7 +337,7 @@ function drawGeneratedArt(ctx, orient, style, title) {
 }
 
 // Game screens: transparent in the exported asset so the emulator output shows through.
-function drawScreenAreas(ctx, orient, forExport) {
+function drawScreenAreas(ctx: Ctx, orient: OrientationLayout, forExport?: boolean): void {
   ctx.fillStyle = '#000';
   for (const s of orient.screens) {
     const f = s.outputFrame;
@@ -331,10 +346,9 @@ function drawScreenAreas(ctx, orient, forExport) {
   }
 }
 
-// opts: { orient, orientation, style, bgImage, drawControls, forExport, title }
-function renderSkin(ctx, opts) {
+function renderSkin(ctx: Ctx, opts: RenderOptions): void {
   const { orient, bgImage } = opts;
-  const style = { ...DEFAULT_STYLE, ...opts.style };
+  const style: Style = { ...DEFAULT_STYLE, ...opts.style };
   const portrait = opts.orientation === 'portrait';
 
   ctx.save();
@@ -351,8 +365,8 @@ function renderSkin(ctx, opts) {
   ctx.restore();
 }
 
-function renderThumbstick(ctx, size, style) {
-  const s = { ...DEFAULT_STYLE, ...style };
+function renderThumbstick(ctx: Ctx, size: number, style?: Partial<Style>): void {
+  const s: Style = { ...DEFAULT_STYLE, ...style };
   const r = size / 2;
   const grad = ctx.createRadialGradient(r * 0.8, r * 0.7, r * 0.1, r, r, r);
   grad.addColorStop(0, shade(s.button, 50));

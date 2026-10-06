@@ -3,25 +3,26 @@
 
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '../style.css';
-import * as State from './state.js';
-import * as Layout from '../layout.js';
-import { ProjectStorage, Autosave } from './storage.js';
-import { History } from './history.js';
-import { ProjectService } from './project.js';
-import { loadImages } from './images.js';
-import { SidebarView } from './views/sidebar.js';
-import { StageView } from './views/stage.js';
-import { InspectorView } from './views/inspector.js';
-import { TopbarView } from './views/topbar.js';
-import { $, toast } from './dom.js';
-import { Editor } from '../editor.js';
+import * as State from './state';
+import * as Layout from '../layout';
+import { ProjectStorage, Autosave } from './storage';
+import { History } from './history';
+import { ProjectService } from './project';
+import { loadImages } from './images';
+import { SidebarView } from './views/sidebar';
+import { StageView } from './views/stage';
+import { InspectorView } from './views/inspector';
+import { TopbarView } from './views/topbar';
+import { $, toast } from './dom';
+import { Editor } from '../editor';
+import type { AppContext, ChangeOptions, Ref } from '../types';
 
 const storage = new ProjectStorage({
   onQuotaExceeded: () => toast('The image is too large for autosave; use "Save project" to keep the artwork.'),
 });
 
 // Everything the editor and the views share. The editor relies on exactly this interface.
-const context = {
+const context: AppContext = {
   state: State.restoreState(storage.loadProject()),
   ui: { orientation: 'portrait', selection: [], alignRef: null, ...storage.loadView(State.defaultView()) },
   images: {},
@@ -30,7 +31,7 @@ const context = {
     return this.state.orientations[this.ui.orientation];
   },
 
-  select(refs) {
+  select(refs: Ref[]) {
     this.ui.selection = refs || [];
     this.ui.alignRef = null;
     inspector.renderSelection();
@@ -38,8 +39,7 @@ const context = {
     editor.render();
   },
 
-  // opts: { geometryOnly } while dragging, { fromPanel } for inspector edits, { fromAlign } for align clicks.
-  changed(opts = {}) {
+  changed(opts: ChangeOptions = {}) {
     // Any edit other than an align click starts a fresh align reference.
     if (!opts.fromAlign) this.ui.alignRef = null;
     Layout.syncTouch(this.current());
@@ -52,7 +52,7 @@ const context = {
   },
 
   removeSelected() {
-    const ids = new Set(this.ui.selection.filter((r) => r.type === 'item').map((r) => r.id));
+    const ids = new Set(this.ui.selection.flatMap((r) => (r.type === 'item' ? [r.id] : [])));
     if (!ids.size) return;
     const orient = this.current();
     orient.items = orient.items.filter((i) => !ids.has(i.id));
@@ -61,7 +61,7 @@ const context = {
   },
 };
 
-const editor = new Editor($('editor-canvas'), $('canvas-wrap'), context);
+const editor = new Editor($<HTMLCanvasElement>('editor-canvas'), $('canvas-wrap'), context);
 editor.onCursor = (p) => {
   $('cursor-pos').textContent = `x ${Math.round(p.x)} · y ${Math.round(p.y)} pt`;
 };
@@ -111,7 +111,7 @@ const service = new ProjectService(context, {
   resetHistory: () => history.reset(),
   saveView: commands.saveView,
   notify: toast,
-  ask: (message) => window.confirm(message),
+  ask: (message: string) => window.confirm(message),
 });
 
 const sidebar = new SidebarView(context, { service, redraw: commands.redraw, save: commands.save, renderStage: () => stage.render() });

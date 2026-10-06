@@ -1,22 +1,41 @@
 // Right panel: orientation settings, adding buttons, the element list and the selection panel
 // (single button, single screen or a multi-selection with align/distribute tools).
 
-import { CONSOLES, CUSTOM_INPUTS, allowedInputs } from '../../consoles.js';
-import { FILTER_PRESETS, presetFilter } from '../../filters.js';
-import * as Layout from '../../layout.js';
-import { alignFrames, distributeFrames, boundsOf } from '../../snap.js';
-import { refKey, itemRef, screenRef, toggleRef, resolveRef } from '../../refs.js';
-import { ICONS } from '../../render.js';
-import { CLASSES, $, el, button, numberField, frameFields, edgesFields } from '../dom.js';
+import { CONSOLES, CUSTOM_INPUTS, allowedInputs } from '../../consoles';
+import { FILTER_PRESETS, presetFilter } from '../../filters';
+import * as Layout from '../../layout';
+import { alignFrames, distributeFrames, boundsOf, type AlignMode } from '../../snap';
+import { refKey, itemRef, screenRef, toggleRef, resolveRef } from '../../refs';
+import { ICONS } from '../../render';
+import { CLASSES, $, el, button, numberField, frameFields, edgesFields, errorMessage } from '../dom';
+import type {
+  AppContext,
+  ButtonItem,
+  ChangeOptions,
+  DirectionalItem,
+  Frame,
+  Item,
+  OrientationLayout,
+  Ref,
+  Screen,
+  ScreenFilter,
+  Shape,
+  Thumbstick,
+} from '../../types';
 
-const SHAPES = ['circle', 'pill', 'rect', 'text'];
+interface InspectorDeps {
+  redraw(): void;
+  save(): void;
+}
+
+const SHAPES: Shape[] = ['circle', 'pill', 'rect', 'text'];
 const DUPLICATE_OFFSET = 10;
-const FRAME_KEYS = ['x', 'y', 'width', 'height'];
+const FRAME_KEYS: (keyof Frame)[] = ['x', 'y', 'width', 'height'];
 
 const ITEM_NAMES = { dpad: 'D-Pad', thumbstick: 'Thumbstick', touch: 'Touch screen' };
-const describeItem = (item) => ITEM_NAMES[item.kind] || item.inputs.join(' + ');
+const describeItem = (item: Item) => (item.kind === 'button' ? item.inputs.join(' + ') : ITEM_NAMES[item.kind]);
 
-const ALIGN_TOOLS = [
+const ALIGN_TOOLS: [AlignMode, string, string][] = [
   ['left', '⇤ Left', 'Align left'],
   ['hcenter', '↔ Center', 'Center horizontally'],
   ['right', 'Right ⇥', 'Align right'],
@@ -25,57 +44,76 @@ const ALIGN_TOOLS = [
   ['bottom', 'Bottom ⤓', 'Align bottom'],
 ];
 
+interface JsonEditorOptions<T> {
+  // JSON text a cleared textarea stands for (none: clearing is an error).
+  whenEmpty?: string;
+  // Throws when the parsed value has the wrong shape.
+  validate: (parsed: unknown) => T;
+}
+
 // JSON textarea that calls onValue(parsed) for valid input and shows the error otherwise.
-// `whenEmpty` is the JSON text a cleared textarea stands for (none: clearing is an error).
-function jsonEditor(value, onValue, { whenEmpty, validate = () => {} } = {}) {
+function jsonEditor<T>(value: T, onValue: (value: T) => void, { whenEmpty, validate }: JsonEditorOptions<T>) {
   const warn = el('p', { class: 'hint' });
   const area = el('textarea', { class: CLASSES.textarea }, JSON.stringify(value, null, 2));
   area.addEventListener('input', () => {
     try {
-      const parsed = JSON.parse(area.value || whenEmpty);
-      validate(parsed);
+      const parsed = validate(JSON.parse(area.value || (whenEmpty ?? '')));
       warn.textContent = '';
       onValue(parsed);
     } catch (err) {
-      warn.textContent = `Invalid JSON: ${err.message}`;
+      warn.textContent = `Invalid JSON: ${errorMessage(err)}`;
     }
   });
   return { area, warn };
 }
 
+function asInputsObject(parsed: unknown): Record<string, string> {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('must be an object');
+  return parsed as Record<string, string>;
+}
+
+function asFilters(parsed: unknown): ScreenFilter[] {
+  if (!Array.isArray(parsed)) throw new Error('must be an array');
+  return parsed;
+}
+
 class InspectorView {
-  // deps: { redraw(), save() }
-  constructor(context, deps) {
+  context: AppContext;
+  deps: InspectorDeps;
+  panelChanged: () => void;
+
+  constructor(context: AppContext, deps: InspectorDeps) {
     this.context = context;
     this.deps = deps;
     this.panelChanged = () => this.context.changed({ fromPanel: true });
   }
 
-  get orient() {
+  get orient(): OrientationLayout {
     return this.context.current();
   }
 
-  init() {
-    $('orient-translucent').addEventListener('change', (e) => {
-      this.orient.translucent = e.target.checked;
+  init(): void {
+    const translucent = $<HTMLInputElement>('orient-translucent');
+    translucent.addEventListener('change', () => {
+      this.orient.translucent = translucent.checked;
       this.deps.save();
     });
     $('btn-add').addEventListener('click', () => {
-      const item = Layout.newItem(this.context.state.consoleId, $('add-input').value, this.orient.mappingSize);
+      const item = Layout.newItem($<HTMLSelectElement>('add-input').value, this.orient.mappingSize);
       this.addItem(item);
     });
   }
 
-  addItem(item) {
+  addItem(item: Item): void {
     this.orient.items.push(item);
     this.context.select([itemRef(item.id)]);
     this.context.changed({});
   }
 
-  render() {
+  render(): void {
     const orient = this.orient;
     $('mapping-size').textContent = `mappingSize ${orient.mappingSize.width}×${orient.mappingSize.height} pt`;
-    $('orient-translucent').checked = Boolean(orient.translucent);
+    $<HTMLInputElement>('orient-translucent').checked = Boolean(orient.translucent);
     const onEdges = () => {
       this.deps.redraw();
       this.deps.save();
@@ -86,8 +124,8 @@ class InspectorView {
     this.renderElementList();
   }
 
-  renderAddOptions() {
-    const option = (value) => el('option', { value }, value);
+  renderAddOptions(): void {
+    const option = (value: string) => el('option', { value }, value);
     const con = CONSOLES[this.context.state.consoleId];
     $('add-input').replaceChildren(
       el('optgroup', { label: 'Console' }, ...con.buttons.map(option)),
@@ -99,18 +137,18 @@ class InspectorView {
   // ---- element list ----------------------------------------------------------
 
   // Click selects one; Shift/Ctrl/Cmd+click toggles, like on the canvas.
-  listClick(ref, e) {
+  listClick(ref: Ref, e: MouseEvent): void {
     const additive = e.shiftKey || e.ctrlKey || e.metaKey;
     this.context.select(additive ? toggleRef(this.context.ui.selection, ref) : [ref]);
   }
 
-  renderElementList() {
+  renderElementList(): void {
     const orient = this.orient;
     const selected = new Set(this.context.ui.selection.map(refKey));
-    const row = (ref, name, detail) =>
+    const row = (ref: Ref, name: string, detail: string) =>
       el('li', {
         class: `list-group-item list-group-item-action${selected.has(refKey(ref)) ? ' active' : ''}`,
-        onclick: (e) => this.listClick(ref, e),
+        onclick: (e: MouseEvent) => this.listClick(ref, e),
       }, el('span', {}, name), el('span', {}, detail));
 
     const screens = orient.screens.map((s, i) =>
@@ -124,43 +162,47 @@ class InspectorView {
   // ---- selection panel -------------------------------------------------------
 
   // Refresh only the numeric frame inputs while dragging (keeps the panel stable).
-  updateFrameFields() {
+  updateFrameFields(): void {
     const selection = this.context.ui.selection;
     if (selection.length !== 1) return;
     const resolved = resolveRef(this.orient, selection[0]);
     if (!resolved) return;
     const prefix = selection[0].type === 'item' ? 'frame' : 'output';
     for (const key of FRAME_KEYS) {
-      const input = document.querySelector(`[data-frame="${prefix}.${key}"]`);
-      if (input && document.activeElement !== input) input.value = resolved.frame[key];
+      const input = document.querySelector<HTMLInputElement>(`[data-frame="${prefix}.${key}"]`);
+      if (input && document.activeElement !== input) input.value = String(resolved.frame[key]);
     }
   }
 
-  renderSelection() {
+  renderSelection(): void {
     const selection = this.context.ui.selection.filter((r) => resolveRef(this.orient, r));
     $('selection-empty').hidden = selection.length > 0;
     $('selection-body').hidden = selection.length === 0;
     $('selection-body').replaceChildren(...this.selectionPanel(selection));
   }
 
-  selectionPanel(selection) {
+  // `selection` only holds refs that resolve in the current orientation.
+  selectionPanel(selection: Ref[]): HTMLElement[] {
     if (!selection.length) return [];
     if (selection.length > 1) return this.multiPanel(selection);
-    const { item, screen } = resolveRef(this.orient, selection[0]);
-    return item ? this.itemPanel(item) : this.screenPanel(screen, selection[0].index);
+    const ref = selection[0];
+    const resolved = resolveRef(this.orient, ref);
+    if (!resolved) return [];
+    if (resolved.item) return this.itemPanel(resolved.item);
+    return ref.type === 'screen' ? this.screenPanel(resolved.screen, ref.index) : [];
   }
 
-  multiPanel(selection) {
-    const frames = selection.map((r) => resolveRef(this.orient, r).frame);
+  multiPanel(selection: Ref[]): HTMLElement[] {
+    const frames = selection.map((r) => resolveRef(this.orient, r)?.frame).filter((f) => f !== undefined);
     const ui = this.context.ui;
-    const tool = (text, title, apply, { disabled = false, changeOpts = {} } = {}) =>
+    const tool = (text: string, title: string, apply: () => void, { disabled = false, changeOpts = {} as ChangeOptions } = {}) =>
       button(text, () => {
         apply();
         this.context.changed(changeOpts);
       }, { title, disabled });
     // Align against the selection's box from before the first align click, so switching
     // between left/center/right (or top/middle/bottom) keeps moving the buttons.
-    const align = ([mode, text, title]) =>
+    const align = ([mode, text, title]: [AlignMode, string, string]) =>
       tool(text, title, () => {
         if (!ui.alignRef) ui.alignRef = boundsOf(frames);
         alignFrames(frames, mode, ui.alignRef);
@@ -168,7 +210,7 @@ class InspectorView {
     const tooFew = frames.length < 3;
     const first = frames[0];
 
-    const nodes = [
+    const nodes: HTMLElement[] = [
       el('h3', {}, `${selection.length} selected`),
       el('p', { class: 'hint' }, 'Align (to the selection box)'),
       el('div', { class: 'grid3 tools' }, ...ALIGN_TOOLS.map(align)),
@@ -187,8 +229,8 @@ class InspectorView {
     return nodes;
   }
 
-  itemPanel(item) {
-    const fields = Array.isArray(item.inputs) ? this.buttonFields(item) : this.directionalFields(item);
+  itemPanel(item: Item): HTMLElement[] {
+    const fields = item.kind === 'button' ? this.buttonFields(item) : this.directionalFields(item);
     const nodes = [el('h3', {}, describeItem(item)), ...fields];
     nodes.push(el('h3', {}, 'frame (pt)'), frameFields(item.frame, 'frame', this.panelChanged));
     if (item.kind === 'thumbstick' && item.thumbstick) nodes.push(...this.thumbstickFields(item.thumbstick));
@@ -197,7 +239,7 @@ class InspectorView {
   }
 
   // Buttons: comma-separated inputs, art label and shape.
-  buttonFields(item) {
+  buttonFields(item: ButtonItem): HTMLElement[] {
     const allowed = new Set(allowedInputs(this.context.state.consoleId));
     const warn = el('p', { class: 'hint' });
     const checkInputs = () => {
@@ -223,7 +265,7 @@ class InspectorView {
 
     const shape = el('select', { class: CLASSES.select }, ...SHAPES.map((s) => el('option', { value: s, selected: item.shape === s }, s)));
     shape.addEventListener('change', () => {
-      item.shape = shape.value;
+      item.shape = shape.value as Shape;
       this.panelChanged();
     });
 
@@ -236,26 +278,26 @@ class InspectorView {
   }
 
   // D-Pad, thumbstick and touch screen: inputs object edited as JSON.
-  directionalFields(item) {
+  directionalFields(item: DirectionalItem): HTMLElement[] {
     const { area, warn } = jsonEditor(item.inputs, (inputs) => {
       item.inputs = inputs;
       this.panelChanged();
-    });
-    const nodes = [el('label', {}, 'inputs', area), warn];
+    }, { validate: asInputsObject });
+    const nodes: HTMLElement[] = [el('label', {}, 'inputs', area), warn];
     if (item.kind === 'dpad') nodes.push(el('p', { class: 'hint' }, 'Map the D-Pad exactly, without padding; use extendedEdges for slack.'));
     if (item.kind === 'touch') nodes.push(el('p', { class: 'hint' }, 'Follows the outputFrame of screen 2 automatically.'));
     return nodes;
   }
 
-  thumbstickFields(thumbstick) {
-    const size = (key) => numberField(key, thumbstick[key], (v) => {
+  thumbstickFields(thumbstick: Thumbstick): HTMLElement[] {
+    const size = (key: 'width' | 'height') => numberField(key, thumbstick[key], (v) => {
       thumbstick[key] = v || 1;
       this.panelChanged();
     });
     return [el('h3', {}, 'Thumbstick image (pt)'), el('div', { class: 'grid2' }, size('width'), size('height'))];
   }
 
-  itemEdgesAndActions(item) {
+  itemEdgesAndActions(item: Item): HTMLElement[] {
     item.extendedEdges = item.extendedEdges || {};
     const actions = el('div', { class: 'd-flex gap-2 mt-2' },
       button('Duplicate', () => this.duplicate(item)),
@@ -263,17 +305,17 @@ class InspectorView {
     return [el('h3', {}, 'extendedEdges (empty = inherit)'), edgesFields(item.extendedEdges, true, this.panelChanged), actions];
   }
 
-  duplicate(item) {
+  duplicate(item: Item): void {
     const ms = this.orient.mappingSize;
-    const copy = JSON.parse(JSON.stringify(item));
+    const copy = structuredClone(item);
     copy.id = Layout.newId();
     copy.frame.x = Math.min(copy.frame.x + DUPLICATE_OFFSET, ms.width - copy.frame.width);
     copy.frame.y = Math.min(copy.frame.y + DUPLICATE_OFFSET, ms.height - copy.frame.height);
-    if (copy.thumbstick) copy.thumbstick.name = `thumbstick_${copy.id}`;
+    if (copy.kind !== 'button' && copy.thumbstick) copy.thumbstick.name = `thumbstick_${copy.id}`;
     this.addItem(copy);
   }
 
-  screenPanel(screen, index) {
+  screenPanel(screen: Screen, index: number): HTMLElement[] {
     const con = CONSOLES[this.context.state.consoleId];
     const fixAspect = button('Fix aspect ratio (height from inputFrame)', () => {
       const ratio = screen.inputFrame.width / screen.inputFrame.height;
@@ -281,7 +323,7 @@ class InspectorView {
       this.context.changed({});
     }, { class: `${CLASSES.button} w-100 mt-2` });
 
-    const nodes = [
+    const nodes: HTMLElement[] = [
       el('h3', {}, `Screen ${index + 1}`),
       el('h3', {}, 'outputFrame (pt)'),
       frameFields(screen.outputFrame, 'output', this.panelChanged),
@@ -295,19 +337,16 @@ class InspectorView {
     return [...nodes, ...this.filterFields(screen)];
   }
 
-  filterFields(screen) {
+  filterFields(screen: Screen): HTMLElement[] {
     const { area, warn } = jsonEditor(screen.filters || [], (filters) => {
       screen.filters = filters;
       this.panelChanged();
-    }, {
-      whenEmpty: '[]',
-      validate: (parsed) => {
-        if (!Array.isArray(parsed)) throw new Error('must be an array');
-      },
-    });
+    }, { whenEmpty: '[]', validate: asFilters });
     const preset = el('select', { class: 'form-select' }, ...FILTER_PRESETS.map((p) => el('option', { value: p.id }, p.name)));
     const add = button('+', () => {
-      screen.filters = [...(screen.filters || []), presetFilter(preset.value)];
+      const filter = presetFilter(preset.value);
+      if (!filter) return;
+      screen.filters = [...(screen.filters || []), filter];
       area.value = JSON.stringify(screen.filters, null, 2);
       this.panelChanged();
     }, { class: 'btn btn-outline-secondary' });

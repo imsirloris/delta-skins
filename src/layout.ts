@@ -6,21 +6,76 @@
 // `g` is the anchor as a fraction of the region, `d` an offset in base points that is
 // multiplied by the scale factor `s` (base design = 414pt wide).
 
-import * as Consoles from './consoles.js';
+import * as Consoles from './consoles';
+import type {
+  ButtonItem,
+  ConsoleDef,
+  ConsoleId,
+  Device,
+  DirectionalItem,
+  Frame,
+  FullEdges,
+  Item,
+  ItemKind,
+  LayoutKind,
+  Orientation,
+  OrientationLayout,
+  Shape,
+  Size,
+} from './types';
+
+// Anchor inside a region: `g` as a fraction of the region, `d` in base points (times `s`).
+interface Anchor {
+  g: [number, number];
+  d: [number, number];
+}
+
+type LandscapeRegion = 'left' | 'right' | 'center';
+
+interface LandscapeAnchor extends Anchor {
+  r: LandscapeRegion;
+}
+
+// Element of a default layout, before it is placed on a device.
+interface Template {
+  kind: ItemKind;
+  inputs: string[] | Record<string, string>;
+  label: string;
+  shape: Shape;
+  w: number;
+  h: number;
+  p: Anchor;
+  ls: LandscapeAnchor;
+  stick?: number;
+}
+
+interface Region {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+interface SafeInsets {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
 
 const DPAD_INPUTS = { up: 'up', down: 'down', left: 'left', right: 'right' };
 const STICK_INPUTS = { up: 'analogStickUp', down: 'analogStickDown', left: 'analogStickLeft', right: 'analogStickRight' };
-const DEFAULT_EDGES = { top: 8, bottom: 8, left: 8, right: 8 };
+const DEFAULT_EDGES: FullEdges = { top: 8, bottom: 8, left: 8, right: 8 };
 
-function button(input, label, size, p, ls, shape) {
+function button(input: string, label: string, size: number, p: Anchor, ls: LandscapeAnchor, shape?: Shape): Template {
   return { kind: 'button', inputs: [input], label, shape: shape || 'circle', w: size, h: size, p, ls };
 }
 
-function pill(input, label, p, ls) {
+function pill(input: string, label: string, p: Anchor, ls: LandscapeAnchor): Template {
   return { kind: 'button', inputs: [input], label, shape: 'pill', w: 60, h: 24, p, ls };
 }
 
-function shoulder(input, label, side) {
+function shoulder(input: string, label: string, side: 'left' | 'right'): Template {
   const left = side === 'left';
   return {
     kind: 'button',
@@ -34,21 +89,21 @@ function shoulder(input, label, side) {
   };
 }
 
-const dpad = (p, ls, size) => ({ kind: 'dpad', inputs: DPAD_INPUTS, label: '', shape: 'dpad', w: size || 130, h: size || 130, p, ls });
+const dpad = (p: Anchor, ls: LandscapeAnchor, size?: number): Template => ({ kind: 'dpad', inputs: DPAD_INPUTS, label: '', shape: 'dpad', w: size || 130, h: size || 130, p, ls });
 const menu = () => button('menu', '', 36, { g: [0.5, 0], d: [0, 26] }, { r: 'center', g: [0.5, 1], d: [0, -24] });
 
 // Portrait/landscape group anchors shared by most consoles.
-const P_DPAD = { g: [0.25, 0.45], d: [0, 0] };
-const L_DPAD = { r: 'left', g: [0.5, 0.55], d: [0, 0] };
-const FACE_P = [0.75, 0.45];
-const FACE_L = ['right', 0.5, 0.55];
+const P_DPAD: Anchor = { g: [0.25, 0.45], d: [0, 0] };
+const L_DPAD: LandscapeAnchor = { r: 'left', g: [0.5, 0.55], d: [0, 0] };
+const FACE_P: [number, number] = [0.75, 0.45];
+const FACE_L: LandscapeAnchor['g'] = [0.5, 0.55];
 
 // Face button at offset (dx, dy) from the face group anchor.
-function face(input, label, size, dx, dy) {
-  return button(input, label, size, { g: FACE_P, d: [dx, dy] }, { r: FACE_L[0], g: [FACE_L[1], FACE_L[2]], d: [dx, dy] });
+function face(input: string, label: string, size: number, dx: number, dy: number): Template {
+  return button(input, label, size, { g: FACE_P, d: [dx, dy] }, { r: 'right', g: FACE_L, d: [dx, dy] });
 }
 
-function selectStart(selectInput, selectLabel) {
+function selectStart(selectInput: string, selectLabel: string): Template[] {
   return [
     pill(selectInput, selectLabel, { g: [0.5, 1], d: [-40, -22] }, { r: 'left', g: [0.5, 1], d: [0, -28] }),
     pill('start', 'START', { g: [0.5, 1], d: [40, -22] }, { r: 'right', g: [0.5, 1], d: [0, -28] }),
@@ -63,7 +118,7 @@ const fourButtons = () => [
   face('y', 'Y', 52, -56, 0),
 ];
 
-const ELEMENTS = {
+const ELEMENTS: Record<ConsoleId, () => Template[]> = {
   gbc: () => [dpad(P_DPAD, L_DPAD), ...twoButtons(), ...selectStart('select', 'SELECT'), menu()],
   nes: () => [dpad(P_DPAD, L_DPAD), ...twoButtons(), ...selectStart('select', 'SELECT'), menu()],
   gba: () => [
@@ -91,7 +146,7 @@ const ELEMENTS = {
     menu(),
   ],
   genesis: () => {
-    const g6 = (input, label, dx, dy) => face(input, label, 50, dx, dy);
+    const g6 = (input: string, label: string, dx: number, dy: number) => face(input, label, 50, dx, dy);
     return [
       dpad(P_DPAD, L_DPAD),
       g6('x', 'X', -50, -32),
@@ -105,7 +160,7 @@ const ELEMENTS = {
     ];
   },
   n64: () => {
-    const c = (input, label, dx, dy) =>
+    const c = (input: string, label: string, dx: number, dy: number) =>
       button(input, label, 34, { g: [0.78, 0.36], d: [dx, dy] }, { r: 'right', g: [0.5, 0.35], d: [dx, dy] });
     return [
       shoulder('l', 'L', 'left'),
@@ -144,14 +199,14 @@ const ELEMENTS = {
   },
 };
 
-const round = (v) => Math.round(v);
+const round = (v: number) => Math.round(v);
 
-function rect(x, y, width, height) {
+function rect(x: number, y: number, width: number, height: number): Frame {
   return { x: round(x), y: round(y), width: round(width), height: round(height) };
 }
 
 // Fit a w×h box with the given aspect inside maxW×maxH.
-function fit(aspect, maxW, maxH) {
+function fit(aspect: number, maxW: number, maxH: number): { w: number; h: number } {
   let w = maxW;
   let h = w / aspect;
   if (h > maxH) {
@@ -161,7 +216,7 @@ function fit(aspect, maxW, maxH) {
   return { w, h };
 }
 
-function makeScreens(con, frames) {
+function makeScreens(con: ConsoleDef, frames: Frame[]): OrientationLayout['screens'] {
   const { width: iw, height: ih } = con.inputFrame;
   if (con.dualScreen) {
     return frames.map((f, i) => ({
@@ -174,12 +229,12 @@ function makeScreens(con, frames) {
   return [screen];
 }
 
-function screenAspect(con) {
+function screenAspect(con: ConsoleDef): number {
   const { width, height } = con.inputFrame;
   return con.dualScreen ? width / (height / 2) : width / height;
 }
 
-function portraitScreens(con, W, H, safe) {
+function portraitScreens(con: ConsoleDef, W: number, H: number, safe: Pick<SafeInsets, 'top' | 'bottom'>): Frame[] {
   const avail = H - safe.top - safe.bottom;
   const aspect = screenAspect(con);
   if (con.dualScreen) {
@@ -191,7 +246,7 @@ function portraitScreens(con, W, H, safe) {
   return [rect((W - size.w) / 2, safe.top, size.w, size.h)];
 }
 
-function landscapeScreens(con, W, H, safe) {
+function landscapeScreens(con: ConsoleDef, W: number, H: number, safe: Pick<SafeInsets, 'left' | 'right'>): Frame[] {
   const aspect = screenAspect(con);
   const maxW = W - safe.left - safe.right;
   if (con.dualScreen) {
@@ -206,7 +261,7 @@ function landscapeScreens(con, W, H, safe) {
   return [rect((W - size.w) / 2, (H - size.h) / 2, size.w, size.h)];
 }
 
-function clampFrame(f, W, H) {
+function clampFrame(f: Frame, W: number, H: number): Frame {
   const width = Math.min(f.width, W);
   const height = Math.min(f.height, H);
   return {
@@ -218,27 +273,24 @@ function clampFrame(f, W, H) {
 }
 
 let nextId = 1;
-const newId = () => 'i' + nextId++;
+const newId = (): string => 'i' + nextId++;
 
-function toItem(el, cx, cy, s, orientation) {
+function toItem(el: Template, cx: number, cy: number, s: number, orientation: Orientation): Item {
   const w = el.w * s;
   const h = el.h * s;
-  const item = {
-    id: newId(),
-    kind: el.kind,
-    inputs: Array.isArray(el.inputs) ? [...el.inputs] : { ...el.inputs },
-    label: el.label,
-    shape: el.shape,
-    frame: rect(cx - w / 2, cy - h / 2, w, h),
-  };
+  const id = newId();
+  const { label, shape } = el;
+  const frame = rect(cx - w / 2, cy - h / 2, w, h);
+  if (Array.isArray(el.inputs)) return { id, kind: 'button', inputs: [...el.inputs], label, shape, frame };
+  const item: DirectionalItem = { id, kind: el.kind as DirectionalItem['kind'], inputs: { ...el.inputs }, label, shape, frame };
   if (el.kind === 'thumbstick') {
-    const size = round(el.stick * s);
+    const size = round((el.stick ?? 0) * s);
     item.thumbstick = { name: `${orientation}_thumbstick`, width: size, height: size };
   }
   return item;
 }
 
-function touchItem(frame) {
+function touchItem(frame: Frame): DirectionalItem {
   return {
     id: newId(),
     kind: 'touch',
@@ -251,28 +303,28 @@ function touchItem(frame) {
 }
 
 // Keep the DS touch item glued to the bottom screen's outputFrame.
-function syncTouch(orient) {
+function syncTouch(orient: OrientationLayout): void {
   const touch = orient.items.find((i) => i.kind === 'touch');
   if (touch && orient.screens[1]) touch.frame = { ...orient.screens[1].outputFrame };
 }
 
-function mappingSizeFor(device, orientation) {
+function mappingSizeFor(device: Device, orientation: Orientation): Size {
   const { w, h } = device.points;
   return orientation === 'portrait' ? { width: w, height: h } : { width: h, height: w };
 }
 
-function buildLayout(device, consoleId, orientation) {
+function buildLayout(device: Device, consoleId: ConsoleId, orientation: Orientation): OrientationLayout {
   const con = Consoles.CONSOLES[consoleId];
   const mappingSize = mappingSizeFor(device, orientation);
   const W = mappingSize.width;
   const H = mappingSize.height;
-  const safe = device.safe[orientation];
   const elements = ELEMENTS[consoleId]();
-  let frames;
-  let regionFor;
-  let s;
+  let frames: Frame[];
+  let regionFor: (el: Template) => Region;
+  let s: number;
 
   if (orientation === 'portrait') {
+    const safe = device.safe.portrait;
     frames = portraitScreens(con, W, H, safe);
     const screenBottom = Math.max(...frames.map((f) => f.y + f.height));
     const top = screenBottom + 8;
@@ -281,6 +333,7 @@ function buildLayout(device, consoleId, orientation) {
     s = Math.min(W / 414, region.h / 330);
     regionFor = () => region;
   } else {
+    const safe = device.safe.landscape;
     frames = landscapeScreens(con, W, H, safe);
     s = H / 414;
     const colW = 190 * s;
@@ -345,16 +398,16 @@ const FLIPPAD_BASE = {
 };
 
 // Base-layout y (402pt wide iPhone) -> target device, keeping the offset from the safe top.
-function flipPadY(device, y) {
+function flipPadY(device: Device, y: number): number {
   const s = device.points.w / FLIPPAD_BASE.width;
   return device.safe.portrait.top + (y - FLIPPAD_BASE.safeTop) * s;
 }
 
-function flipPadCoverTop(device) {
+function flipPadCoverTop(device: Device): number {
   return Math.round(flipPadY(device, FLIPPAD_BASE.coverTop));
 }
 
-function buildFlipPadLayout(device, consoleId, orientation) {
+function buildFlipPadLayout(device: Device, consoleId: ConsoleId, orientation: Orientation): OrientationLayout {
   // The FlipPad is only used in portrait; landscape keeps the regular layout.
   if (orientation !== 'portrait') return buildLayout(device, consoleId, orientation);
 
@@ -372,7 +425,7 @@ function buildFlipPadLayout(device, consoleId, orientation) {
   const aspect = screenAspect(con);
 
   // Screen(s) as large as possible between the safe top and the base line.
-  let frames;
+  let frames: Frame[];
   if (con.dualScreen) {
     const size = fit(aspect, W - margin * 2, (base - safe.top) / 2);
     const width = Math.floor(size.w);
@@ -390,7 +443,7 @@ function buildFlipPadLayout(device, consoleId, orientation) {
   }
 
   const buttonW = FLIPPAD_BASE.buttonWidth * s;
-  const items = FLIPPAD_BASE.buttons.map((b) => ({
+  const items: Item[] = FLIPPAD_BASE.buttons.map((b): ButtonItem => ({
     id: newId(),
     kind: 'button',
     inputs: [b.input],
@@ -412,17 +465,17 @@ function buildFlipPadLayout(device, consoleId, orientation) {
   };
 }
 
-const LAYOUT_KINDS = {
+const LAYOUT_KINDS: Partial<Record<LayoutKind, typeof buildLayout>> = {
   standard: buildLayout,
   flippad: buildFlipPadLayout,
 };
 
-function buildLayoutKind(kind, device, consoleId, orientation) {
-  return (LAYOUT_KINDS[kind] || buildLayout)(device, consoleId, orientation);
+function buildLayoutKind(kind: LayoutKind | string, device: Device, consoleId: ConsoleId, orientation: Orientation): OrientationLayout {
+  return (LAYOUT_KINDS[kind as LayoutKind] || buildLayout)(device, consoleId, orientation);
 }
 
 // Keep generated ids unique after loading a saved project.
-function bumpIds(orients) {
+function bumpIds(orients: OrientationLayout[]): void {
   for (const o of orients) {
     for (const item of o.items) {
       const n = parseInt(String(item.id).slice(1), 10);
@@ -431,24 +484,22 @@ function bumpIds(orients) {
   }
 }
 
-function newItem(consoleId, input, mappingSize) {
-  const size = 50;
-  const kind = input === 'dpad' ? 'dpad' : input === 'thumbstick' ? 'thumbstick' : 'button';
-  const w = kind === 'button' ? size : 120;
-  const item = {
-    id: newId(),
-    kind,
-    inputs: kind === 'dpad' ? { ...DPAD_INPUTS } : kind === 'thumbstick' ? { ...STICK_INPUTS } : [input],
-    label: kind === 'button' ? defaultLabel(input) : '',
-    shape: kind === 'dpad' ? 'dpad' : kind === 'thumbstick' ? 'stick' : 'circle',
-    frame: rect((mappingSize.width - w) / 2, (mappingSize.height - w) / 2, w, w),
-  };
-  if (kind === 'thumbstick') item.thumbstick = { name: `thumbstick_${item.id}`, width: 60, height: 60 };
-  return item;
+// `input` is a console/Delta input, or 'dpad' / 'thumbstick' for a directional control.
+function newItem(input: string, mappingSize: Size): Item {
+  if (input !== 'dpad' && input !== 'thumbstick') {
+    const size = 50;
+    const frame = rect((mappingSize.width - size) / 2, (mappingSize.height - size) / 2, size, size);
+    return { id: newId(), kind: 'button', inputs: [input], label: defaultLabel(input), shape: 'circle', frame };
+  }
+  const size = 120;
+  const frame = rect((mappingSize.width - size) / 2, (mappingSize.height - size) / 2, size, size);
+  if (input === 'dpad') return { id: newId(), kind: 'dpad', inputs: { ...DPAD_INPUTS }, label: '', shape: 'dpad', frame };
+  const id = newId();
+  return { id, kind: 'thumbstick', inputs: { ...STICK_INPUTS }, label: '', shape: 'stick', frame, thumbstick: { name: `thumbstick_${id}`, width: 60, height: 60 } };
 }
 
 // Delta's app buttons get a drawn icon instead of text (see DeltaRender ICONS).
-const LABELS = {
+const LABELS: Record<string, string> = {
   menu: '',
   quickSave: '',
   quickLoad: '',
@@ -463,7 +514,7 @@ const LABELS = {
   cRight: 'C▶',
 };
 
-function defaultLabel(input) {
+function defaultLabel(input: string): string {
   return input in LABELS ? LABELS[input] : input.toUpperCase();
 }
 

@@ -3,33 +3,45 @@
 
 const DEFAULT_LIMIT = 100;
 
+interface HistoryOptions {
+  snapshot: () => string;
+  restore: (snapshot: string) => void;
+  limit?: number;
+  // Called after the stacks change.
+  onChange?: () => void;
+}
+
 class History {
-  // snapshot(): string; restore(snapshot); onChange(): after the stacks change.
-  constructor({ snapshot, restore, limit = DEFAULT_LIMIT, onChange = () => {} }) {
+  snapshot: () => string;
+  restore: (snapshot: string) => void;
+  limit: number;
+  onChange: () => void;
+  undoStack: string[] = [];
+  redoStack: string[] = [];
+
+  constructor({ snapshot, restore, limit = DEFAULT_LIMIT, onChange = () => {} }: HistoryOptions) {
     this.snapshot = snapshot;
     this.restore = restore;
     this.limit = limit;
     this.onChange = onChange;
-    this.undoStack = [];
-    this.redoStack = [];
   }
 
-  get canUndo() {
+  get canUndo(): boolean {
     return this.undoStack.length > 1;
   }
 
-  get canRedo() {
+  get canRedo(): boolean {
     return this.redoStack.length > 0;
   }
 
-  reset() {
+  reset(): void {
     this.undoStack = [this.snapshot()];
     this.redoStack = [];
     this.onChange();
   }
 
   // Returns false when nothing changed since the last snapshot.
-  record() {
+  record(): boolean {
     const snap = this.snapshot();
     if (snap === this.undoStack[this.undoStack.length - 1]) return false;
     this.undoStack.push(snap);
@@ -39,17 +51,19 @@ class History {
     return true;
   }
 
-  undo() {
-    if (!this.canUndo) return false;
-    this.redoStack.push(this.undoStack.pop());
+  undo(): boolean {
+    const top = this.undoStack.at(-1);
+    if (!this.canUndo || top === undefined) return false;
+    this.undoStack.pop();
+    this.redoStack.push(top);
     this.restore(this.undoStack[this.undoStack.length - 1]);
     this.onChange();
     return true;
   }
 
-  redo() {
-    if (!this.canRedo) return false;
+  redo(): boolean {
     const snap = this.redoStack.pop();
+    if (snap === undefined) return false;
     this.undoStack.push(snap);
     this.restore(snap);
     this.onChange();

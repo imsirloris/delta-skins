@@ -1,21 +1,48 @@
 // Builds Delta's info.json from the editor state. Pure (no DOM) so Node scripts can reuse it.
 
-import * as Consoles from './consoles.js';
+import * as Consoles from './consoles';
+import type {
+  AssetFormat,
+  ConsoleDef,
+  DirectionalItem,
+  Edges,
+  InfoAssets,
+  InfoFamily,
+  InfoItem,
+  InfoRepresentation,
+  InfoScreen,
+  Item,
+  Thumbstick,
+  Orientation,
+  Screen,
+  SkinInfo,
+  SkinSource,
+} from './types';
 
-const ORIENTATIONS = ['portrait', 'landscape'];
+const ORIENTATIONS: Orientation[] = ['portrait', 'landscape'];
 
-function slug(text) {
+type ThumbstickItem = DirectionalItem & { thumbstick: Thumbstick };
+
+export type AssetPlanEntry =
+  | { file: string; type: 'skin'; orientation: Orientation }
+  | { file: string; type: 'thumbstick'; orientation: Orientation; item: ThumbstickItem };
+
+function hasThumbstick(item: Item): item is ThumbstickItem {
+  return item.kind === 'thumbstick' && Boolean(item.thumbstick);
+}
+
+function slug(text: string): string {
   return (
     String(text)
       .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
+      .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'skin'
   );
 }
 
-function assetNames(orientation, format) {
+function assetNames(orientation: Orientation, format: AssetFormat): InfoAssets {
   if (format === 'png') {
     const file = `iphone_${orientation}.png`;
     return { small: file, medium: file, large: file };
@@ -23,17 +50,17 @@ function assetNames(orientation, format) {
   return { resizable: `iphone_${orientation}.pdf` };
 }
 
-function thumbstickFile(item, format) {
+function thumbstickFile(item: ThumbstickItem, format: AssetFormat): string {
   return `${item.thumbstick.name}.${format === 'png' ? 'png' : 'pdf'}`;
 }
 
-function hasEdges(edges) {
-  return edges && ['top', 'bottom', 'left', 'right'].some((k) => typeof edges[k] === 'number');
+function hasEdges(edges: Edges | undefined): edges is Edges {
+  return Boolean(edges) && (['top', 'bottom', 'left', 'right'] as const).some((k) => typeof edges?.[k] === 'number');
 }
 
-function exportItem(item, format) {
-  const out = { inputs: Array.isArray(item.inputs) ? [...item.inputs] : { ...item.inputs } };
-  if (item.kind === 'thumbstick' && item.thumbstick) {
+function exportItem(item: Item, format: AssetFormat): InfoItem {
+  const out: Partial<InfoItem> = { inputs: Array.isArray(item.inputs) ? [...item.inputs] : { ...item.inputs } };
+  if (hasThumbstick(item)) {
     out.thumbstick = {
       name: thumbstickFile(item, format),
       width: item.thumbstick.width,
@@ -42,24 +69,24 @@ function exportItem(item, format) {
   }
   out.frame = { ...item.frame };
   if (hasEdges(item.extendedEdges)) out.extendedEdges = { ...item.extendedEdges };
-  return out;
+  return out as InfoItem;
 }
 
-function exportScreen(screen, con) {
-  const out = {};
+function exportScreen(screen: Screen, con: ConsoleDef): InfoScreen {
+  const out: Partial<InfoScreen> = {};
   if (!con.omitInputFrame) out.inputFrame = { ...screen.inputFrame };
   out.outputFrame = { ...screen.outputFrame };
-  if (screen.filters && screen.filters.length) out.filters = JSON.parse(JSON.stringify(screen.filters));
-  return out;
+  if (screen.filters && screen.filters.length) out.filters = structuredClone(screen.filters);
+  return out as InfoScreen;
 }
 
-function buildInfoJson(state) {
+function buildInfoJson(state: SkinSource): SkinInfo {
   const con = Consoles.CONSOLES[state.consoleId];
-  const family = {};
+  const family: InfoFamily = {};
   for (const orientation of ORIENTATIONS) {
     const o = state.orientations[orientation];
     if (!o || !o.enabled) continue;
-    const rep = {
+    const rep: InfoRepresentation = {
       assets: assetNames(orientation, state.assetFormat),
       items: o.items.map((item) => exportItem(item, state.assetFormat)),
       screens: o.screens.map((s) => exportScreen(s, con)),
@@ -79,15 +106,15 @@ function buildInfoJson(state) {
 }
 
 // Files referenced by info.json, keyed by file name, with what to render for each.
-function assetPlan(state) {
-  const plan = [];
+function assetPlan(state: SkinSource): AssetPlanEntry[] {
+  const plan: AssetPlanEntry[] = [];
   for (const orientation of ORIENTATIONS) {
     const o = state.orientations[orientation];
     if (!o || !o.enabled) continue;
     const names = assetNames(orientation, state.assetFormat);
-    plan.push({ file: names.resizable || names.large, type: 'skin', orientation });
+    plan.push({ file: (names.resizable || names.large)!, type: 'skin', orientation });
     for (const item of o.items) {
-      if (item.kind === 'thumbstick' && item.thumbstick) {
+      if (hasThumbstick(item)) {
         plan.push({ file: thumbstickFile(item, state.assetFormat), type: 'thumbstick', orientation, item });
       }
     }

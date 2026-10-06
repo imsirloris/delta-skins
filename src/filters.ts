@@ -1,7 +1,15 @@
 // CoreImage filter presets for `screens[].filters`
 // (from https://noah978.gitbook.io/delta-docs/skins/filter-examples).
 
-const FILTER_PRESETS = [
+import type { ScreenFilter } from './types';
+
+interface FilterPreset {
+  id: string;
+  name: string;
+  filter: ScreenFilter;
+}
+
+const FILTER_PRESETS: FilterPreset[] = [
   {
     id: 'monochrome',
     name: 'Monochrome 50% gray (CIColorMonochrome)',
@@ -48,9 +56,9 @@ const FILTER_PRESETS = [
   },
 ];
 
-function presetFilter(id) {
+function presetFilter(id: string): ScreenFilter | null {
   const preset = FILTER_PRESETS.find((p) => p.id === id);
-  return preset ? JSON.parse(JSON.stringify(preset.filter)) : null;
+  return preset ? structuredClone(preset.filter) : null;
 }
 
 export { FILTER_PRESETS, presetFilter };

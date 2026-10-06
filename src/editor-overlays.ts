@@ -2,8 +2,11 @@
 // touch areas, selection, smart guides and the marquee. Never exported.
 // All functions draw in points; `viewScale` (screen px per point) keeps strokes 1px-sharp.
 
-import { roundRect } from './render.js';
-import { boundsOf } from './snap.js';
+import { roundRect } from './render';
+import { boundsOf, type Guide } from './snap';
+import type { Device, Frame, Orientation, OrientationLayout, Size } from './types';
+
+type Ctx = CanvasRenderingContext2D;
 
 const HANDLE_SIZE = 10; // screen pixels
 const LABEL_FONT = '600 12px -apple-system, "Segoe UI", sans-serif';
@@ -14,7 +17,7 @@ const GRID_MIN_SCREEN_PX = 3;
 // Dynamic Island hint in portrait (points).
 const ISLAND = { width: 126, height: 37, top: 11 };
 
-function drawChecker(ctx, w, h, size) {
+function drawChecker(ctx: Ctx, w: number, h: number, size: number): void {
   ctx.fillStyle = '#d0d0d0';
   ctx.fillRect(0, 0, w, h);
   ctx.fillStyle = '#b8b8b8';
@@ -23,7 +26,7 @@ function drawChecker(ctx, w, h, size) {
   }
 }
 
-function drawScreenLabels(ctx, orient) {
+function drawScreenLabels(ctx: Ctx, orient: OrientationLayout): void {
   ctx.save();
   ctx.fillStyle = 'rgba(255,255,255,0.35)';
   ctx.font = LABEL_FONT;
@@ -38,7 +41,7 @@ function drawScreenLabels(ctx, orient) {
   ctx.restore();
 }
 
-function gridLines(ctx, size, length, span, vertical, major) {
+function gridLines(ctx: Ctx, size: number, length: number, span: number, vertical: boolean, major: boolean): void {
   for (let i = 1; i * size < length; i++) {
     if ((i % GRID_MAJOR_EVERY === 0) !== major) continue;
     const at = i * size;
@@ -52,12 +55,13 @@ function gridLines(ctx, size, length, span, vertical, major) {
   }
 }
 
-function drawGrid(ctx, mappingSize, size, viewScale) {
+function drawGrid(ctx: Ctx, mappingSize: Size, size: number, viewScale: number): void {
   if (!(size > 0) || size * viewScale < GRID_MIN_SCREEN_PX) return;
   const { width, height } = mappingSize;
   ctx.save();
   ctx.lineWidth = 1 / viewScale;
-  for (const [major, color] of [[false, 'rgba(120, 200, 255, 0.18)'], [true, 'rgba(120, 200, 255, 0.4)']]) {
+  const passes: [boolean, string][] = [[false, 'rgba(120, 200, 255, 0.18)'], [true, 'rgba(120, 200, 255, 0.4)']];
+  for (const [major, color] of passes) {
     ctx.strokeStyle = color;
     ctx.beginPath();
     gridLines(ctx, size, width, height, true, major);
@@ -67,18 +71,19 @@ function drawGrid(ctx, mappingSize, size, viewScale) {
   ctx.restore();
 }
 
-function drawSafeArea(ctx, device, orientation, mappingSize) {
-  const safe = device.safe[orientation];
+function drawSafeArea(ctx: Ctx, device: Device, orientation: Orientation, mappingSize: Size): void {
   const { width, height } = mappingSize;
   ctx.save();
   ctx.fillStyle = 'rgba(255, 200, 0, 0.18)';
   if (orientation === 'landscape') {
+    const safe = device.safe.landscape;
     ctx.fillRect(0, 0, safe.left, height);
     ctx.fillRect(width - safe.right, 0, safe.right, height);
     ctx.fillRect(0, height - safe.bottom, width, safe.bottom);
     ctx.restore();
     return;
   }
+  const safe = device.safe.portrait;
   ctx.fillRect(0, 0, width, safe.top);
   ctx.fillRect(0, height - safe.bottom, width, safe.bottom);
   if (device.family === 'edgeToEdge' && safe.top > 0) {
@@ -90,7 +95,7 @@ function drawSafeArea(ctx, device, orientation, mappingSize) {
 }
 
 // Hatched area hidden under the FlipPad controller, from `top` to the bottom of the skin.
-function drawFlipPadCover(ctx, top, mappingSize, viewScale) {
+function drawFlipPadCover(ctx: Ctx, top: number, mappingSize: Size, viewScale: number): void {
   const { width } = mappingSize;
   const h = mappingSize.height - top;
   if (h <= 0) return;
@@ -126,7 +131,7 @@ function drawFlipPadCover(ctx, top, mappingSize, viewScale) {
 }
 
 // Red fill = item frame, dashed outline = frame plus extendedEdges (the real touch area).
-function drawTouchAreas(ctx, orient, viewScale) {
+function drawTouchAreas(ctx: Ctx, orient: OrientationLayout, viewScale: number): void {
   ctx.save();
   ctx.lineWidth = 1 / viewScale;
   for (const item of orient.items) {
@@ -143,7 +148,7 @@ function drawTouchAreas(ctx, orient, viewScale) {
 }
 
 // One frame gets a resize handle; several get a dashed group box instead.
-function drawSelection(ctx, frames, viewScale) {
+function drawSelection(ctx: Ctx, frames: Frame[], viewScale: number): void {
   if (!frames.length) return;
   const px = 1 / viewScale;
   ctx.save();
@@ -166,7 +171,7 @@ function drawSelection(ctx, frames, viewScale) {
   ctx.restore();
 }
 
-function drawGuides(ctx, guides, viewScale) {
+function drawGuides(ctx: Ctx, guides: Guide[], viewScale: number): void {
   if (!guides.length) return;
   ctx.save();
   ctx.strokeStyle = GUIDE_COLOR;
@@ -185,7 +190,7 @@ function drawGuides(ctx, guides, viewScale) {
   ctx.restore();
 }
 
-function drawMarquee(ctx, rect, viewScale) {
+function drawMarquee(ctx: Ctx, rect: Frame, viewScale: number): void {
   ctx.save();
   ctx.fillStyle = 'rgba(58, 139, 255, 0.12)';
   ctx.strokeStyle = SELECTION_COLOR;
