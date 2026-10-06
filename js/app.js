@@ -304,6 +304,13 @@
 
   // ---- small DOM helpers ---------------------------------------------------
 
+  // Bootstrap classes for the controls built in the inspector.
+  const BTN = 'btn btn-sm btn-outline-secondary';
+  const BTN_DANGER = 'btn btn-sm btn-outline-danger';
+  const INPUT = 'form-control form-control-sm';
+  const SELECT = 'form-select form-select-sm';
+  const TEXTAREA = 'form-control form-control-sm font-monospace';
+
   function el(tag, attrs, ...children) {
     const node = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs || {})) {
@@ -316,7 +323,7 @@
   }
 
   function numberField(text, value, onValue, attrs) {
-    const input = el('input', { type: 'number', value: value ?? '', ...attrs });
+    const input = el('input', { type: 'number', class: INPUT, value: value ?? '', ...attrs });
     input.addEventListener('input', () => {
       const v = input.value === '' ? null : Number(input.value);
       if (v === null || Number.isFinite(v)) onValue(v);
@@ -677,11 +684,12 @@
     const orient = app.current();
     const keys = new Set(app.ui.selection.map(refKey));
     const rows = [];
+    const rowClass = (ref) => `list-group-item list-group-item-action${keys.has(refKey(ref)) ? ' active' : ''}`;
     orient.screens.forEach((s, i) => {
       const ref = { type: 'screen', index: i };
       const f = s.outputFrame;
       rows.push(
-        el('li', { class: keys.has(refKey(ref)) ? 'selected' : '', onclick: (e) => listClick(ref, e) },
+        el('li', { class: rowClass(ref), onclick: (e) => listClick(ref, e) },
           el('span', {}, `Tela ${i + 1}`), el('span', {}, `${f.width}×${f.height}`)),
       );
     });
@@ -690,7 +698,7 @@
       const ref = { type: 'item', id: item.id };
       const f = item.frame;
       rows.push(
-        el('li', { class: keys.has(refKey(ref)) ? 'selected' : '', onclick: (e) => listClick(ref, e) },
+        el('li', { class: rowClass(ref), onclick: (e) => listClick(ref, e) },
           el('span', {}, describeItem(item)), el('span', {}, `${f.x},${f.y}`)),
       );
     }
@@ -742,7 +750,7 @@
   function multiPanel(sel) {
     const frames = sel.map((r) => resolveRef(r).frame);
     const action = (text, title, fn, disabled, opts) => {
-      const btn = el('button', { type: 'button', title, disabled }, text);
+      const btn = el('button', { type: 'button', class: BTN, title, disabled }, text);
       btn.addEventListener('click', () => {
         fn();
         app.changed(opts || {});
@@ -778,7 +786,7 @@
         action('Mesma altura', '', () => frames.forEach((f) => (f.height = first.height)))),
     ];
     if (sel.some((r) => r.type === 'item')) {
-      const del = el('button', { type: 'button', class: 'danger wide' }, 'Remover botões selecionados');
+      const del = el('button', { type: 'button', class: `${BTN_DANGER} w-100 mt-2` }, 'Remover botões selecionados');
       del.addEventListener('click', () => app.removeSelected());
       nodes.push(del);
     }
@@ -791,7 +799,7 @@
 
     if (Array.isArray(item.inputs)) {
       const warn = el('p', { class: 'hint' });
-      const input = el('input', { type: 'text', value: item.inputs.join(', ') });
+      const input = el('input', { type: 'text', class: INPUT, value: item.inputs.join(', ') });
       const check = () => {
         const bad = item.inputs.filter((i) => !allowed.has(i));
         warn.textContent = bad.length ? `⚠ Não suportado neste console: ${bad.join(', ')}` : 'Vários inputs = pressionados juntos.';
@@ -804,7 +812,7 @@
       check();
       nodes.push(el('label', {}, 'inputs (separados por vírgula)', input), warn);
 
-      const labelInput = el('input', { type: 'text', value: item.label || '' });
+      const labelInput = el('input', { type: 'text', class: INPUT, value: item.label || '' });
       labelInput.addEventListener('input', () => {
         item.label = labelInput.value;
         panelChanged();
@@ -812,7 +820,7 @@
       const hasIcon = item.inputs.length === 1 && item.inputs[0] in root.DeltaRender.ICONS;
       nodes.push(el('label', {}, hasIcon ? 'Rótulo na arte (vazio = ícone)' : 'Rótulo na arte', labelInput));
 
-      const shape = el('select', {}, ...['circle', 'pill', 'rect', 'text'].map((s) => el('option', { value: s, selected: item.shape === s }, s)));
+      const shape = el('select', { class: SELECT }, ...['circle', 'pill', 'rect', 'text'].map((s) => el('option', { value: s, selected: item.shape === s }, s)));
       shape.addEventListener('change', () => {
         item.shape = shape.value;
         panelChanged();
@@ -820,7 +828,7 @@
       nodes.push(el('label', {}, 'Forma', shape));
     } else {
       const warn = el('p', { class: 'hint' });
-      const area = el('textarea', {}, JSON.stringify(item.inputs, null, 2));
+      const area = el('textarea', { class: TEXTAREA }, JSON.stringify(item.inputs, null, 2));
       area.addEventListener('input', () => {
         try {
           item.inputs = JSON.parse(area.value);
@@ -849,7 +857,7 @@
     if (item.kind !== 'touch') {
       item.extendedEdges = item.extendedEdges || {};
       nodes.push(el('h3', {}, 'extendedEdges (vazio = herda)'), edgesFields(item.extendedEdges, true, panelChanged));
-      const dup = el('button', { type: 'button' }, 'Duplicar');
+      const dup = el('button', { type: 'button', class: BTN }, 'Duplicar');
       dup.addEventListener('click', () => {
         const orient = app.current();
         const copy = JSON.parse(JSON.stringify(item));
@@ -861,9 +869,9 @@
         app.select([{ type: 'item', id: copy.id }]);
         app.changed({});
       });
-      const del = el('button', { type: 'button', class: 'danger' }, 'Remover');
+      const del = el('button', { type: 'button', class: BTN_DANGER }, 'Remover');
       del.addEventListener('click', () => app.removeSelected());
-      nodes.push(el('div', { class: 'row' }, dup, del));
+      nodes.push(el('div', { class: 'd-flex gap-2 mt-2' }, dup, del));
     }
     return nodes;
   }
@@ -873,7 +881,7 @@
     const nodes = [el('h3', {}, `Tela ${index + 1}`)];
 
     nodes.push(el('h3', {}, 'outputFrame (pt)'), frameFields(screen.outputFrame, 'output', panelChanged));
-    const fix = el('button', { type: 'button', class: 'wide' }, 'Corrigir proporção (altura pelo inputFrame)');
+    const fix = el('button', { type: 'button', class: `${BTN} w-100 mt-2` }, 'Corrigir proporção (altura pelo inputFrame)');
     fix.addEventListener('click', () => {
       const ratio = screen.inputFrame.width / screen.inputFrame.height;
       screen.outputFrame.height = Math.round(screen.outputFrame.width / ratio);
@@ -888,10 +896,10 @@
     }
 
     nodes.push(el('h3', {}, 'filters'));
-    const preset = el('select', {}, ...FILTER_PRESETS.map((p) => el('option', { value: p.id }, p.name)));
-    const addBtn = el('button', { type: 'button' }, '+');
+    const preset = el('select', { class: 'form-select' }, ...FILTER_PRESETS.map((p) => el('option', { value: p.id }, p.name)));
+    const addBtn = el('button', { type: 'button', class: 'btn btn-outline-secondary' }, '+');
     const warn = el('p', { class: 'hint' });
-    const area = el('textarea', {}, JSON.stringify(screen.filters || [], null, 2));
+    const area = el('textarea', { class: TEXTAREA }, JSON.stringify(screen.filters || [], null, 2));
     addBtn.addEventListener('click', () => {
       screen.filters = screen.filters || [];
       screen.filters.push(presetFilter(preset.value));
@@ -909,7 +917,7 @@
         warn.textContent = `JSON inválido: ${err.message}`;
       }
     });
-    nodes.push(el('div', { class: 'row' }, preset, addBtn), area, warn,
+    nodes.push(el('div', { class: 'input-group input-group-sm mb-2' }, preset, addBtn), area, warn,
       el('p', { class: 'hint' }, 'Filtros CoreImage (CIFilter). Cores em 0–255; vetores {x,y}.'));
     return nodes;
   }
