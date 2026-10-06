@@ -23,8 +23,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-          cache: npm
-      - run: npm ci
+      # No lockfile in the repository, so the latest versions allowed by package.json are installed.
+      - run: npm install
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
