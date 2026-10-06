@@ -46,6 +46,17 @@
     return out;
   }
 
+  // Thumbstick image size Delta assumes when a skin doesn't declare one.
+  const DEFAULT_THUMBSTICK = { width: 85, height: 87 };
+
+  // Editor kind and shape of a directional (object-mapped) item.
+  function directionalKind(inputs) {
+    const values = Object.values(inputs || {});
+    if (values.includes('touchScreenX')) return { kind: 'touch', shape: 'none' };
+    if (values.some((v) => String(v).startsWith('analogStick'))) return { kind: 'thumbstick', shape: 'stick' };
+    return { kind: 'dpad', shape: 'dpad' };
+  }
+
   function convertItem(item, t, bounds, orientation) {
     const out = {
       id: Layout.newId(),
@@ -53,30 +64,17 @@
       label: '',
       shape: 'rect',
     };
-    if (Array.isArray(item.inputs)) {
-      out.kind = 'button';
-      out.inputs = [...item.inputs];
-    } else {
-      const values = Object.values(item.inputs || {});
-      out.inputs = { ...item.inputs };
-      if (values.includes('touchScreenX')) {
-        out.kind = 'touch';
-        out.shape = 'none';
-      } else if (values.some((v) => String(v).startsWith('analogStick'))) {
-        out.kind = 'thumbstick';
-        out.shape = 'stick';
-        const ts = item.thumbstick || { width: 85, height: 87 };
-        out.thumbstick = {
-          name: `${orientation}_thumbstick_${out.id}`,
-          width: Math.round(ts.width * t.scale),
-          height: Math.round(ts.height * t.scale),
-        };
-      } else {
-        out.kind = 'dpad';
-        out.shape = 'dpad';
-      }
-    }
     if (item.extendedEdges) out.extendedEdges = mapEdges(item.extendedEdges, t.scale);
+    if (Array.isArray(item.inputs)) return { ...out, kind: 'button', inputs: [...item.inputs] };
+
+    Object.assign(out, directionalKind(item.inputs), { inputs: { ...item.inputs } });
+    if (out.kind !== 'thumbstick') return out;
+    const size = item.thumbstick || DEFAULT_THUMBSTICK;
+    out.thumbstick = {
+      name: `${orientation}_thumbstick_${out.id}`,
+      width: Math.round(size.width * t.scale),
+      height: Math.round(size.height * t.scale),
+    };
     return out;
   }
 
@@ -116,14 +114,14 @@
   // Returns { consoleId, name, family, orientations: {portrait?, landscape?}, assets: {o: file}, warnings }.
   function convertInfo(info, device) {
     const con = consoleFromGameType(info.gameTypeIdentifier);
-    if (!con) throw new Error(`console desconhecido: ${info.gameTypeIdentifier}`);
+    if (!con) throw new Error(`unknown console: ${info.gameTypeIdentifier}`);
     const iphone = (info.representations && info.representations.iphone) || {};
     const warnings = [];
     let family = device.family;
     if (!iphone[family]) {
       family = Object.keys(iphone).find((k) => iphone[k] && Object.keys(iphone[k]).length);
-      if (!family) throw new Error('a skin não tem representação para iPhone');
-      warnings.push(`A skin é "${family}" e o iPhone escolhido é "${device.family}"; medidas convertidas mesmo assim.`);
+      if (!family) throw new Error('the skin has no iPhone representation');
+      warnings.push(`The skin is "${family}" and the selected iPhone is "${device.family}"; measurements were converted anyway.`);
     }
     const orientations = {};
     const assets = {};
@@ -136,11 +134,11 @@
       const ratioFrom = rep.mappingSize.width / rep.mappingSize.height;
       const ratioTo = target.width / target.height;
       if (Math.abs(ratioFrom - ratioTo) / ratioTo > 0.02) {
-        warnings.push(`${o}: proporção da skin difere do iPhone escolhido; a arte foi recortada para preencher.`);
+        warnings.push(`${o}: the skin's aspect ratio differs from the selected iPhone; the artwork was cropped to fill.`);
       }
     }
-    if (!Object.keys(orientations).length) throw new Error('nenhuma orientação encontrada para iPhone');
-    return { consoleId: con.id, name: info.name || 'Skin importada', family, orientations, assets, warnings };
+    if (!Object.keys(orientations).length) throw new Error('no iPhone orientation found');
+    return { consoleId: con.id, name: info.name || 'Imported skin', family, orientations, assets, warnings };
   }
 
   // ---- artwork extraction (browser) ----------------------------------------------
@@ -234,8 +232,8 @@
       const width = Number(/\/Width\s+(\d+)/.exec(d)[1]);
       const height = Number(/\/Height\s+(\d+)/.exec(d)[1]);
       if (/\/DCTDecode/.test(d)) return { width, height, jpeg: stream.data };
-      if (!/\/FlateDecode/.test(d)) throw new Error('formato de imagem do PDF não suportado');
-      if (Number((/\/BitsPerComponent\s+(\d+)/.exec(d) || [0, 8])[1]) !== 8) throw new Error('PDF com imagem não-8bit');
+      if (!/\/FlateDecode/.test(d)) throw new Error('unsupported PDF image format');
+      if (Number((/\/BitsPerComponent\s+(\d+)/.exec(d) || [0, 8])[1]) !== 8) throw new Error('PDF image is not 8-bit');
       let data = await inflate(stream.data);
       let components = Math.round(data.length / (width * height));
       const predictor = /\/Predictor\s+(\d+)/.exec(d);
@@ -262,7 +260,7 @@
       const maskIds = new Set(images.map((s) => (/\/SMask\s+(\d+)\s+\d+\s+R/.exec(s.dict) || [])[1]).filter(Boolean));
       const size = (s) => Number((/\/Width\s+(\d+)/.exec(s.dict) || [0, 0])[1]) * Number((/\/Height\s+(\d+)/.exec(s.dict) || [0, 0])[1]);
       const candidates = images.filter((s) => !maskIds.has(this.objectNumberAt(s.start))).sort((a, b) => size(b) - size(a));
-      if (!candidates.length) throw new Error('PDF sem imagem (arte vetorial não é suportada; exporte a skin em PNG)');
+      if (!candidates.length) throw new Error('PDF has no image (vector artwork is not supported; export the skin as PNG)');
       const main = candidates[0];
       const image = await this.decode(main);
       const smaskRef = /\/SMask\s+(\d+)\s+\d+\s+R/.exec(main.dict);
@@ -280,7 +278,7 @@
       const img = new Image();
       await new Promise((resolve, reject) => {
         img.onload = resolve;
-        img.onerror = () => reject(new Error('imagem inválida'));
+        img.onerror = () => reject(new Error('invalid image'));
         img.src = url;
       });
       return img;
@@ -319,7 +317,7 @@
 
   async function assetToDataUrl(zip, file) {
     const entry = zip.file(file);
-    if (!entry) throw new Error(`arquivo "${file}" não está no .deltaskin`);
+    if (!entry) throw new Error(`file "${file}" is not in the .deltaskin`);
     const bytes = await entry.async('uint8array');
     if (/\.pdf$/i.test(file)) return pdfImageToDataUrl(bytes);
     const type = /\.jpe?g$/i.test(file) ? 'image/jpeg' : 'image/png';
@@ -336,7 +334,7 @@
   async function importDeltaSkin(file, device) {
     const zip = await root.JSZip.loadAsync(file);
     const infoEntry = zip.file('info.json');
-    if (!infoEntry) throw new Error('info.json não encontrado na raiz do .deltaskin');
+    if (!infoEntry) throw new Error('info.json not found at the root of the .deltaskin');
     const info = JSON.parse(await infoEntry.async('string'));
     const result = convertInfo(info, device);
     result.info = info;
@@ -346,7 +344,7 @@
       try {
         result.images[o] = await assetToDataUrl(zip, name);
       } catch (err) {
-        result.warnings.push(`${o}: não consegui ler a arte (${err.message}); botões serão desenhados pelo app.`);
+        result.warnings.push(`${o}: could not read the artwork (${err.message}); the app will draw the buttons.`);
         result.orientations[o].drawControls = true;
       }
     }

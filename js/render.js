@@ -1,5 +1,6 @@
 // Draws the skin artwork on a canvas. All coordinates are in points; `ctx` must already be
-// scaled (points -> pixels) by the caller.
+// scaled (points -> pixels) by the caller. Loads in Node too (for DEFAULT_STYLE) since nothing
+// touches the DOM until a draw call.
 (function (root) {
   'use strict';
 
@@ -14,6 +15,7 @@
   };
 
   const ACCENT_INPUTS = new Set(['a', 'b', 'x', 'y', 'c', 'z']);
+  const BEZEL_PAD = 6;
 
   function roundRect(ctx, x, y, w, h, r) {
     const radius = Math.max(0, Math.min(r, w / 2, h / 2));
@@ -129,31 +131,34 @@
     ctx.restore();
   }
 
-  function drawButton(ctx, item, style) {
+  function buttonPath(ctx, item) {
     const f = item.frame;
+    if (item.shape === 'circle') {
+      ctx.beginPath();
+      ctx.ellipse(f.x + f.width / 2, f.y + f.height / 2, f.width / 2 - 1, f.height / 2 - 1, 0, 0, Math.PI * 2);
+      return;
+    }
+    const radius = item.shape === 'pill' ? f.height / 2 : Math.min(f.width, f.height) * 0.3;
+    roundRect(ctx, f.x, f.y, f.width, f.height, radius);
+  }
+
+  function drawButton(ctx, item, style) {
     if (item.shape === 'text') return drawTextButton(ctx, item, style);
+    const f = item.frame;
     const input = Array.isArray(item.inputs) ? item.inputs[0] : '';
     const fill = ACCENT_INPUTS.has(input) ? style.accent : style.button;
     ctx.fillStyle = fill;
     ctx.strokeStyle = shade(fill, 20);
     ctx.lineWidth = 1.5;
-    if (item.shape === 'circle') {
-      ctx.beginPath();
-      ctx.ellipse(f.x + f.width / 2, f.y + f.height / 2, f.width / 2 - 1, f.height / 2 - 1, 0, 0, Math.PI * 2);
-    } else if (item.shape === 'pill') {
-      roundRect(ctx, f.x, f.y, f.width, f.height, f.height / 2);
-    } else {
-      roundRect(ctx, f.x, f.y, f.width, f.height, Math.min(f.width, f.height) * 0.3);
-    }
+    buttonPath(ctx, item);
     ctx.fill();
     ctx.stroke();
+    const cx = f.x + f.width / 2;
+    const cy = f.y + f.height / 2;
     const icon = iconFor(item);
-    if (icon) {
-      drawIcon(ctx, icon, f.x + f.width / 2, f.y + f.height / 2, Math.min(f.width, f.height) * 0.58, style.text);
-      return;
-    }
+    if (icon) return drawIcon(ctx, icon, cx, cy, Math.min(f.width, f.height) * 0.58, style.text);
     const size = item.shape === 'pill' ? f.height * 0.42 : Math.min(f.width, f.height) * 0.42;
-    label(ctx, item.label, f.x + f.width / 2, f.y + f.height / 2, size, style.text);
+    label(ctx, item.label, cx, cy, size, style.text);
   }
 
   // ---- icons for Delta's app buttons ----------------------------------------
@@ -298,44 +303,46 @@
     ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
   }
 
-  // opts: { orient, orientation, style, bgImage, drawControls, forExport, title }
-  function renderSkin(ctx, opts) {
-    const { orient, orientation, bgImage } = opts;
-    const style = { ...DEFAULT_STYLE, ...opts.style };
+  // Gradient background, screen bezels and the skin name (portrait without a custom image).
+  function drawGeneratedArt(ctx, orient, style, title) {
     const W = orient.mappingSize.width;
     const H = orient.mappingSize.height;
-    const portrait = orientation === 'portrait';
-
-    ctx.save();
-    if (bgImage) {
-      drawCover(ctx, bgImage, W, H);
-    } else if (portrait) {
-      const grad = ctx.createLinearGradient(0, 0, 0, H);
-      grad.addColorStop(0, style.bg);
-      grad.addColorStop(1, style.bg2);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, W, H);
-      for (const s of orient.screens) {
-        const f = s.outputFrame;
-        const pad = 6;
-        ctx.fillStyle = style.bezel;
-        roundRect(ctx, f.x - pad, f.y - pad, f.width + pad * 2, f.height + pad * 2, 10);
-        ctx.fill();
-      }
-      const titleY = opts.title ? findTitleY(orient, W, H) : null;
-      if (titleY !== null) label(ctx, opts.title, W / 2, titleY, 11, shade(style.bg, 60));
-    }
-
-    // Game screens: transparent in the exported asset so the emulator output shows through.
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, style.bg);
+    grad.addColorStop(1, style.bg2);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = style.bezel;
     for (const s of orient.screens) {
       const f = s.outputFrame;
-      if (opts.forExport) {
-        ctx.clearRect(f.x, f.y, f.width, f.height);
-      } else {
-        ctx.fillStyle = '#000';
-        ctx.fillRect(f.x, f.y, f.width, f.height);
-      }
+      roundRect(ctx, f.x - BEZEL_PAD, f.y - BEZEL_PAD, f.width + BEZEL_PAD * 2, f.height + BEZEL_PAD * 2, 10);
+      ctx.fill();
     }
+    if (!title) return;
+    const titleY = findTitleY(orient, W, H);
+    if (titleY !== null) label(ctx, title, W / 2, titleY, 11, shade(style.bg, 60));
+  }
+
+  // Game screens: transparent in the exported asset so the emulator output shows through.
+  function drawScreenAreas(ctx, orient, forExport) {
+    ctx.fillStyle = '#000';
+    for (const s of orient.screens) {
+      const f = s.outputFrame;
+      if (forExport) ctx.clearRect(f.x, f.y, f.width, f.height);
+      else ctx.fillRect(f.x, f.y, f.width, f.height);
+    }
+  }
+
+  // opts: { orient, orientation, style, bgImage, drawControls, forExport, title }
+  function renderSkin(ctx, opts) {
+    const { orient, bgImage } = opts;
+    const style = { ...DEFAULT_STYLE, ...opts.style };
+    const portrait = opts.orientation === 'portrait';
+
+    ctx.save();
+    if (bgImage) drawCover(ctx, bgImage, orient.mappingSize.width, orient.mappingSize.height);
+    else if (portrait) drawGeneratedArt(ctx, orient, style, opts.title);
+    drawScreenAreas(ctx, orient, opts.forExport);
 
     // Controls last, so landscape overlays stay visible on top of the screen area.
     if (opts.drawControls !== false) {
@@ -362,5 +369,6 @@
   }
 
   const api = { DEFAULT_STYLE, renderSkin, renderThumbstick, roundRect, ICONS };
-  root.DeltaRender = api;
-})(window);
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.DeltaRender = api;
+})(typeof window !== 'undefined' ? window : globalThis);

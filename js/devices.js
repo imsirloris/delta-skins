@@ -20,8 +20,8 @@
     ['iphone-11-pro', 'iPhone 11 Pro / XS / X (5.8")', 375, 812, 3, 1125, 2436, 'edgeToEdge', 44],
     ['iphone-11', 'iPhone 11 / XR (6.1")', 414, 896, 2, 828, 1792, 'edgeToEdge', 48],
     ['iphone-8-plus', 'iPhone 8 Plus / 7 Plus / 6s Plus / 6 Plus (5.5")', 414, 736, 3, 1080, 1920, 'standard', 0],
-    ['iphone-se3', 'iPhone SE (2ª/3ª ger.) / 8 / 7 / 6s / 6 (4.7")', 375, 667, 2, 750, 1334, 'standard', 0],
-    ['iphone-se1', 'iPhone SE (1ª ger.) / 5s / 5c / 5 (4")', 320, 568, 2, 640, 1136, 'standard', 0],
+    ['iphone-se3', 'iPhone SE (2nd/3rd gen) / 8 / 7 / 6s / 6 (4.7")', 375, 667, 2, 750, 1334, 'standard', 0],
+    ['iphone-se1', 'iPhone SE (1st gen) / 5s / 5c / 5 (4")', 320, 568, 2, 640, 1136, 'standard', 0],
   ];
 
   function makeDevice(id, name, w, h, scale, pixelW, pixelH, family, safeTop) {
@@ -47,7 +47,10 @@
     return device ? JSON.parse(JSON.stringify(device)) : null;
   }
 
-  function customDevice(w, h, scale, family, safeTop) {
+  // Custom devices default to a typical notch inset when edge-to-edge.
+  const CUSTOM_SAFE_TOP = 59;
+
+  function customDevice(w, h, scale, family, safeTop = family === 'edgeToEdge' ? CUSTOM_SAFE_TOP : 0) {
     return makeDevice('custom', 'Custom', w, h, scale, Math.round(w * scale), Math.round(h * scale), family, safeTop);
   }
 

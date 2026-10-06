@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR" data-bs-theme="dark">
+<html lang="en" data-bs-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -11,20 +11,21 @@
     <header class="topbar navbar bg-body-tertiary border-bottom px-3 py-2">
       <h1 class="h5 mb-0">Delta Skin Generator</h1>
       <div class="d-flex flex-wrap align-items-center gap-2">
-        <button id="btn-undo" type="button" class="btn btn-sm btn-outline-secondary" title="Desfazer (Ctrl+Z)">↶ Desfazer</button>
-        <button id="btn-redo" type="button" class="btn btn-sm btn-outline-secondary" title="Refazer (Ctrl+Shift+Z / Ctrl+Y)">↷ Refazer</button>
+        <button id="btn-undo" type="button" class="btn btn-sm btn-outline-secondary" title="Undo (Ctrl+Z)">↶ Undo</button>
+        <button id="btn-redo" type="button" class="btn btn-sm btn-outline-secondary" title="Redo (Ctrl+Shift+Z / Ctrl+Y)">↷ Redo</button>
+        <button id="btn-reset-all" type="button" class="btn btn-sm btn-outline-danger" title="Reset iPhone, console, layout, colors, settings and view options to the defaults">Reset everything</button>
         <span class="vr"></span>
-        <button id="btn-save-project" type="button" class="btn btn-sm btn-outline-secondary">Salvar projeto</button>
+        <button id="btn-save-project" type="button" class="btn btn-sm btn-outline-secondary">Save project</button>
         <label class="btn btn-sm btn-outline-secondary mb-0">
-          Abrir projeto
+          Open project
           <input id="input-open-project" type="file" accept=".json,application/json" hidden />
         </label>
-        <label class="btn btn-sm btn-outline-secondary mb-0" title="Usar uma .deltaskin existente como base (medidas convertidas para o iPhone escolhido + arte)">
-          Importar .deltaskin
+        <label class="btn btn-sm btn-outline-secondary mb-0" title="Use an existing .deltaskin as the base (measurements converted to the selected iPhone, plus its artwork)">
+          Import .deltaskin
           <input id="input-import-skin" type="file" accept=".deltaskin,.zip,application/zip" hidden />
         </label>
-        <button id="btn-info-json" type="button" class="btn btn-sm btn-outline-secondary">Baixar info.json</button>
-        <button id="btn-export" type="button" class="btn btn-sm btn-primary">Exportar .deltaskin</button>
+        <button id="btn-info-json" type="button" class="btn btn-sm btn-outline-secondary">Download info.json</button>
+        <button id="btn-export" type="button" class="btn btn-sm btn-primary">Export .deltaskin</button>
       </div>
     </header>
 
@@ -32,31 +33,31 @@
       <aside class="panel bg-body border-end" id="sidebar">
         <section>
           <h2>iPhone</h2>
-          <label>Modelo
+          <label>Model
             <select class="form-select form-select-sm" id="device-select"></select>
           </label>
           <div id="custom-device" class="grid2" hidden>
-            <label>Largura (pt) <input class="form-control form-control-sm" id="custom-w" type="number" min="200" value="402" /></label>
-            <label>Altura (pt) <input class="form-control form-control-sm" id="custom-h" type="number" min="300" value="874" /></label>
-            <label>Escala <input class="form-control form-control-sm" id="custom-scale" type="number" min="1" max="3" step="0.01" value="3" /></label>
-            <label>Tipo
+            <label>Width (pt) <input class="form-control form-control-sm" id="custom-w" type="number" min="200" value="402" /></label>
+            <label>Height (pt) <input class="form-control form-control-sm" id="custom-h" type="number" min="300" value="874" /></label>
+            <label>Scale <input class="form-control form-control-sm" id="custom-scale" type="number" min="1" max="3" step="0.01" value="3" /></label>
+            <label>Type
               <select class="form-select form-select-sm" id="custom-family">
                 <option value="edgeToEdge">edgeToEdge (notch)</option>
-                <option value="standard">standard (botão home)</option>
+                <option value="standard">standard (home button)</option>
               </select>
             </label>
           </div>
           <p class="hint" id="device-info"></p>
           <details>
-            <summary>Safe area (aprox., em pontos)</summary>
+            <summary>Safe area (approx., in points)</summary>
             <div class="grid2">
-              <label>Retrato topo <input class="form-control form-control-sm" id="safe-p-top" type="number" min="0" /></label>
-              <label>Retrato base <input class="form-control form-control-sm" id="safe-p-bottom" type="number" min="0" /></label>
-              <label>Paisagem esq. <input class="form-control form-control-sm" id="safe-l-left" type="number" min="0" /></label>
-              <label>Paisagem dir. <input class="form-control form-control-sm" id="safe-l-right" type="number" min="0" /></label>
-              <label>Paisagem base <input class="form-control form-control-sm" id="safe-l-bottom" type="number" min="0" /></label>
+              <label>Portrait top <input class="form-control form-control-sm" id="safe-p-top" type="number" min="0" /></label>
+              <label>Portrait bottom <input class="form-control form-control-sm" id="safe-p-bottom" type="number" min="0" /></label>
+              <label>Landscape left <input class="form-control form-control-sm" id="safe-l-left" type="number" min="0" /></label>
+              <label>Landscape right <input class="form-control form-control-sm" id="safe-l-right" type="number" min="0" /></label>
+              <label>Landscape bottom <input class="form-control form-control-sm" id="safe-l-bottom" type="number" min="0" /></label>
             </div>
-            <p class="hint">Afeta só o layout automático. Clique em "Regenerar layout" para aplicar.</p>
+            <p class="hint">Only affects the automatic layout. Click "Standard layout", "FlipPad layout" or "Reset layout" to apply.</p>
           </details>
         </section>
 
@@ -64,93 +65,95 @@
           <h2>Console</h2>
           <select class="form-select form-select-sm" id="console-select"></select>
           <div class="grid2 layout-buttons mt-2">
-            <button id="btn-relayout" type="button" class="btn btn-sm btn-outline-primary" title="Layout com todos os botões na tela">Regenerar layout</button>
-            <button id="btn-flippad" type="button" class="btn btn-sm btn-outline-primary" title="Retrato só com a tela e os botões do Delta; os botões do jogo ficam no controle FlipPad">FlipPad layout</button>
+            <button id="btn-relayout" type="button" class="btn btn-sm btn-outline-primary" title="Every button on screen">Standard layout</button>
+            <button id="btn-flippad" type="button" class="btn btn-sm btn-outline-primary" title="Portrait with only the game screen and Delta’s buttons; the game buttons are on the FlipPad controller">FlipPad layout</button>
           </div>
+          <button id="btn-reset-layout" type="button" class="btn btn-sm btn-outline-secondary w-100 mt-2" title="Move every element back to its default position for the current layout and restore the iPhone safe areas">Reset layout</button>
           <p class="hint" id="layout-kind"></p>
         </section>
 
         <section>
           <h2>Skin</h2>
-          <label>Nome <input class="form-control form-control-sm" id="skin-name" type="text" /></label>
+          <label>Name <input class="form-control form-control-sm" id="skin-name" type="text" /></label>
           <label>Identifier <input class="form-control form-control-sm" id="skin-identifier" type="text" /></label>
-          <label class="check"><input class="form-check-input" id="skin-debug" type="checkbox" /> debug (overlay vermelho no Delta)</label>
-          <label class="check"><input class="form-check-input" id="orient-portrait" type="checkbox" /> Retrato</label>
-          <label class="check"><input class="form-check-input" id="orient-landscape" type="checkbox" /> Paisagem</label>
-          <label>Formato da imagem
+          <label class="check"><input class="form-check-input" id="skin-debug" type="checkbox" /> debug (red overlay in Delta)</label>
+          <label class="check"><input class="form-check-input" id="orient-portrait" type="checkbox" /> Portrait</label>
+          <label class="check"><input class="form-check-input" id="orient-landscape" type="checkbox" /> Landscape</label>
+          <label>Image format
             <select class="form-select form-select-sm" id="asset-format">
-              <option value="pdf">PDF (resizable, recomendado)</option>
+              <option value="pdf">PDF (resizable, recommended)</option>
               <option value="png">PNG (small/medium/large)</option>
             </select>
           </label>
         </section>
 
         <section>
-          <h2>Arte</h2>
+          <h2>Art</h2>
           <div class="grid2">
-            <label>Fundo <input class="form-control form-control-sm form-control-color" id="style-bg" type="color" /></label>
-            <label>Fundo 2 <input class="form-control form-control-sm form-control-color" id="style-bg2" type="color" /></label>
-            <label>Moldura <input class="form-control form-control-sm form-control-color" id="style-bezel" type="color" /></label>
-            <label>Botões <input class="form-control form-control-sm form-control-color" id="style-button" type="color" /></label>
-            <label>Destaque <input class="form-control form-control-sm form-control-color" id="style-accent" type="color" /></label>
-            <label>Texto <input class="form-control form-control-sm form-control-color" id="style-text" type="color" /></label>
+            <label>Background <input class="form-control form-control-sm form-control-color" id="style-bg" type="color" /></label>
+            <label>Background 2 <input class="form-control form-control-sm form-control-color" id="style-bg2" type="color" /></label>
+            <label>Bezel <input class="form-control form-control-sm form-control-color" id="style-bezel" type="color" /></label>
+            <label>Buttons <input class="form-control form-control-sm form-control-color" id="style-button" type="color" /></label>
+            <label>Accent <input class="form-control form-control-sm form-control-color" id="style-accent" type="color" /></label>
+            <label>Text <input class="form-control form-control-sm form-control-color" id="style-text" type="color" /></label>
           </div>
-          <label>Opacidade paisagem <input class="form-range" id="style-opacity" type="range" min="0.1" max="1" step="0.05" /></label>
-          <label class="check"><input class="form-check-input" id="show-title" type="checkbox" /> Nome da skin na arte</label>
-          <h3>Imagem própria (<span class="orient-name"></span>)</h3>
+          <label>Landscape opacity <input class="form-range" id="style-opacity" type="range" min="0.1" max="1" step="0.05" /></label>
+          <button id="btn-reset-colors" type="button" class="btn btn-sm btn-outline-secondary w-100 mb-2" title="Back to the 8BitDo FlipPad black matte palette">Reset colors</button>
+          <label class="check"><input class="form-check-input" id="show-title" type="checkbox" /> Skin name on the art</label>
+          <h3>Custom image (<span class="orient-name"></span>)</h3>
           <input class="form-control form-control-sm" id="bg-upload" type="file" accept="image/*" />
           <p class="hint" id="bg-hint"></p>
-          <label class="check"><input class="form-check-input" id="draw-controls" type="checkbox" /> Desenhar botões sobre a imagem</label>
-          <button id="btn-bg-remove" type="button" class="btn btn-sm btn-outline-secondary w-100 mt-2">Remover imagem</button>
+          <label class="check"><input class="form-check-input" id="draw-controls" type="checkbox" /> Draw buttons over the image</label>
+          <button id="btn-bg-remove" type="button" class="btn btn-sm btn-outline-secondary w-100 mt-2">Remove image</button>
         </section>
       </aside>
 
       <section class="stage bg-body-secondary">
         <div class="stage-toolbar">
           <div class="tabs btn-group btn-group-sm" role="tablist">
-            <button type="button" class="btn btn-outline-primary" data-orientation="portrait" role="tab">Retrato</button>
-            <button type="button" class="btn btn-outline-primary" data-orientation="landscape" role="tab">Paisagem</button>
+            <button type="button" class="btn btn-outline-primary" data-orientation="portrait" role="tab">Portrait</button>
+            <button type="button" class="btn btn-outline-primary" data-orientation="landscape" role="tab">Landscape</button>
           </div>
           <label class="check"><input class="form-check-input" id="view-safe" type="checkbox" checked /> Safe area</label>
-          <label class="check"><input class="form-check-input" id="view-debug" type="checkbox" checked /> Áreas de toque</label>
+          <label class="check"><input class="form-check-input" id="view-debug" type="checkbox" checked /> Touch areas</label>
           <span class="vr"></span>
-          <label class="check" title="Grudar em bordas e centros de outros elementos ao arrastar (segure Alt para desligar)"><input class="form-check-input" id="view-guides" type="checkbox" /> Guias</label>
+          <label class="check" title="Snap to edges and centers of other elements while dragging (hold Alt to turn off)"><input class="form-check-input" id="view-guides" type="checkbox" /> Guides</label>
           <label class="check"><input class="form-check-input" id="view-grid" type="checkbox" /> Grid</label>
-          <label class="check"><input class="form-check-input" id="view-grid-snap" type="checkbox" /> Snap no grid</label>
-          <label class="check grid-size">a cada <input class="form-control form-control-sm" id="view-grid-size" type="number" min="2" max="100" step="1" /> pt</label>
+          <label class="check"><input class="form-check-input" id="view-grid-snap" type="checkbox" /> Snap to grid</label>
+          <label class="check grid-size">every <input class="form-control form-control-sm" id="view-grid-size" type="number" min="2" max="100" step="1" /> pt</label>
           <span class="hint" id="cursor-pos"></span>
         </div>
         <div class="canvas-wrap" id="canvas-wrap">
           <canvas id="editor-canvas" tabindex="0"></canvas>
         </div>
-        <p class="hint center" id="orientation-disabled" hidden>Orientação desativada — não será exportada.</p>
+        <p class="hint center" id="orientation-disabled" hidden>Orientation disabled — it will not be exported.</p>
       </section>
 
       <aside class="panel bg-body border-start" id="inspector">
         <section>
-          <h2>Orientação <span class="orient-name"></span></h2>
+          <h2>Orientation <span class="orient-name"></span></h2>
           <p class="hint" id="mapping-size"></p>
           <label class="check"><input class="form-check-input" id="orient-translucent" type="checkbox" /> translucent</label>
-          <h3>extendedEdges padrão</h3>
+          <h3>Default extendedEdges</h3>
           <div class="grid4" id="orient-edges"></div>
         </section>
 
         <section>
-          <h2>Adicionar botão</h2>
+          <h2>Add button</h2>
           <div class="input-group input-group-sm">
             <select id="add-input" class="form-select"></select>
-            <button id="btn-add" type="button" class="btn btn-outline-secondary">Adicionar</button>
+            <button id="btn-add" type="button" class="btn btn-outline-secondary">Add</button>
           </div>
         </section>
 
         <section id="selection-panel">
-          <h2>Seleção</h2>
-          <p class="hint" id="selection-empty">Clique num botão ou tela no canvas. Arraste para mover (guias rosa mostram alinhamento; Alt desliga), alça no canto redimensiona, setas movem 1pt (Shift = 10pt ou o grid). Shift/Ctrl+clique ou arrastar no vazio seleciona vários; Ctrl+A seleciona todos os botões.</p>
+          <h2>Selection</h2>
+          <p class="hint" id="selection-empty">Click a button or screen on the canvas. Drag to move (pink guides show alignment; Alt turns them off), the corner handle resizes, arrow keys move 1pt (Shift = 10pt or the grid). Shift/Ctrl+click or dragging on empty space selects several; Ctrl+A selects every button.</p>
           <div id="selection-body" hidden></div>
         </section>
 
         <section>
-          <h2>Elementos</h2>
+          <h2>Elements</h2>
           <ul id="element-list" class="element-list list-group list-group-flush"></ul>
         </section>
       </aside>
@@ -169,7 +172,19 @@
     <script src="js/export.js"></script>
     <script src="js/importer.js"></script>
     <script src="js/snap.js"></script>
+    <script src="js/refs.js"></script>
+    <script src="js/editor-overlays.js"></script>
     <script src="js/editor.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/app/state.js"></script>
+    <script src="js/app/storage.js"></script>
+    <script src="js/app/history.js"></script>
+    <script src="js/app/images.js"></script>
+    <script src="js/app/dom.js"></script>
+    <script src="js/app/project.js"></script>
+    <script src="js/app/views/sidebar.js"></script>
+    <script src="js/app/views/stage.js"></script>
+    <script src="js/app/views/inspector.js"></script>
+    <script src="js/app/views/topbar.js"></script>
+    <script src="js/app/main.js"></script>
   </body>
 </html>

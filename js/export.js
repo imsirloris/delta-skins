@@ -16,7 +16,7 @@
 
   function canvasToBlob(canvas) {
     return new Promise((resolve, reject) =>
-      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Falha ao gerar PNG'))), 'image/png'),
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not render the PNG'))), 'image/png'),
     );
   }
 
