@@ -6,7 +6,7 @@
   const FILTER_PRESETS = [
     {
       id: 'monochrome',
-      name: 'Monocromático 50% cinza (CIColorMonochrome)',
+      name: 'Monochrome 50% gray (CIColorMonochrome)',
       filter: {
         name: 'CIColorMonochrome',
         parameters: { inputIntensity: 0.5, inputColor: { r: 128, g: 128, b: 128 } },
@@ -14,7 +14,7 @@
     },
     {
       id: 'gameboy',
-      name: 'Verde Game Boy (CIColorMonochrome)',
+      name: 'Game Boy green (CIColorMonochrome)',
       filter: {
         name: 'CIColorMonochrome',
         parameters: { inputIntensity: 1, inputColor: { r: 155, g: 188, b: 15 } },
@@ -22,17 +22,17 @@
     },
     {
       id: 'rotate180',
-      name: 'Girar 180° (CIAffineTransform)',
+      name: 'Rotate 180° (CIAffineTransform)',
       filter: { name: 'CIAffineTransform', parameters: { inputTransform: { rotation: 180 } } },
     },
     {
       id: 'mirror',
-      name: 'Espelhar horizontal (CIAffineTransform)',
+      name: 'Mirror horizontally (CIAffineTransform)',
       filter: { name: 'CIAffineTransform', parameters: { inputTransform: { scaleX: -1 } } },
     },
     {
       id: 'gradient',
-      name: 'Gradiente (CISmoothLinearGradient)',
+      name: 'Gradient (CISmoothLinearGradient)',
       filter: {
         name: 'CISmoothLinearGradient',
         parameters: {
@@ -45,7 +45,7 @@
     },
     {
       id: 'crystallize',
-      name: 'Cristalizar (CICrystallize)',
+      name: 'Crystallize (CICrystallize)',
       filter: { name: 'CICrystallize', parameters: { inputRadius: 6, inputCenter: { x: 120, y: 0 } } },
     },
   ];
