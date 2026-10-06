@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Delta Skin Generator</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Delta Skin Generator</h1>
+      <div class="topbar-actions">
+        <button id="btn-undo" type="button" title="Desfazer (Ctrl+Z)">↶ Desfazer</button>
+        <button id="btn-redo" type="button" title="Refazer (Ctrl+Shift+Z / Ctrl+Y)">↷ Refazer</button>
+        <span class="divider"></span>
+        <button id="btn-save-project" type="button">Salvar projeto</button>
+        <label class="button">
+          Abrir projeto
+          <input id="input-open-project" type="file" accept=".json,application/json" hidden />
+        </label>
+        <button id="btn-info-json" type="button">Baixar info.json</button>
+        <button id="btn-export" type="button" class="primary">Exportar .deltaskin</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="panel" id="sidebar">
+        <section>
+          <h2>iPhone</h2>
+          <label>Modelo
+            <select id="device-select"></select>
+          </label>
+          <div id="custom-device" class="grid2" hidden>
+            <label>Largura (pt) <input id="custom-w" type="number" min="200" value="402" /></label>
+            <label>Altura (pt) <input id="custom-h" type="number" min="300" value="874" /></label>
+            <label>Escala <input id="custom-scale" type="number" min="1" max="3" step="0.01" value="3" /></label>
+            <label>Tipo
+              <select id="custom-family">
+                <option value="edgeToEdge">edgeToEdge (notch)</option>
+                <option value="standard">standard (botão home)</option>
+              </select>
+            </label>
+          </div>
+          <p class="hint" id="device-info"></p>
+          <details>
+            <summary>Safe area (aprox., em pontos)</summary>
+            <div class="grid2">
+              <label>Retrato topo <input id="safe-p-top" type="number" min="0" /></label>
+              <label>Retrato base <input id="safe-p-bottom" type="number" min="0" /></label>
+              <label>Paisagem esq. <input id="safe-l-left" type="number" min="0" /></label>
+              <label>Paisagem dir. <input id="safe-l-right" type="number" min="0" /></label>
+              <label>Paisagem base <input id="safe-l-bottom" type="number" min="0" /></label>
+            </div>
+            <p class="hint">Afeta só o layout automático. Clique em "Regenerar layout" para aplicar.</p>
+          </details>
+        </section>
+
+        <section>
+          <h2>Console</h2>
+          <select id="console-select"></select>
+          <div class="grid2 layout-buttons">
+            <button id="btn-relayout" type="button" title="Layout com todos os botões na tela">Regenerar layout</button>
+            <button id="btn-flippad" type="button" title="Retrato só com a tela e os botões do Delta; os botões do jogo ficam no controle FlipPad">FlipPad layout</button>
+          </div>
+          <p class="hint" id="layout-kind"></p>
+        </section>
+
+        <section>
+          <h2>Skin</h2>
+          <label>Nome <input id="skin-name" type="text" /></label>
+          <label>Identifier <input id="skin-identifier" type="text" /></label>
+          <label class="check"><input id="skin-debug" type="checkbox" /> debug (overlay vermelho no Delta)</label>
+          <label class="check"><input id="orient-portrait" type="checkbox" /> Retrato</label>
+          <label class="check"><input id="orient-landscape" type="checkbox" /> Paisagem</label>
+          <label>Formato da imagem
+            <select id="asset-format">
+              <option value="pdf">PDF (resizable, recomendado)</option>
+              <option value="png">PNG (small/medium/large)</option>
+            </select>
+          </label>
+        </section>
+
+        <section>
+          <h2>Arte</h2>
+          <div class="grid2">
+            <label>Fundo <input id="style-bg" type="color" /></label>
+            <label>Fundo 2 <input id="style-bg2" type="color" /></label>
+            <label>Moldura <input id="style-bezel" type="color" /></label>
+            <label>Botões <input id="style-button" type="color" /></label>
+            <label>Destaque <input id="style-accent" type="color" /></label>
+            <label>Texto <input id="style-text" type="color" /></label>
+          </div>
+          <label>Opacidade paisagem <input id="style-opacity" type="range" min="0.1" max="1" step="0.05" /></label>
+          <label class="check"><input id="show-title" type="checkbox" /> Nome da skin na arte</label>
+          <h3>Imagem própria (<span class="orient-name"></span>)</h3>
+          <input id="bg-upload" type="file" accept="image/*" />
+          <p class="hint" id="bg-hint"></p>
+          <label class="check"><input id="draw-controls" type="checkbox" /> Desenhar botões sobre a imagem</label>
+          <button id="btn-bg-remove" type="button" class="wide">Remover imagem</button>
+        </section>
+      </aside>
+
+      <section class="stage">
+        <div class="stage-toolbar">
+          <div class="tabs" role="tablist">
+            <button type="button" data-orientation="portrait" role="tab">Retrato</button>
+            <button type="button" data-orientation="landscape" role="tab">Paisagem</button>
+          </div>
+          <label class="check"><input id="view-safe" type="checkbox" checked /> Safe area</label>
+          <label class="check"><input id="view-debug" type="checkbox" checked /> Áreas de toque</label>
+          <span class="divider"></span>
+          <label class="check" title="Grudar em bordas e centros de outros elementos ao arrastar (segure Alt para desligar)"><input id="view-guides" type="checkbox" /> Guias</label>
+          <label class="check"><input id="view-grid" type="checkbox" /> Grid</label>
+          <label class="check"><input id="view-grid-snap" type="checkbox" /> Snap no grid</label>
+          <label class="check grid-size">a cada <input id="view-grid-size" type="number" min="2" max="100" step="1" /> pt</label>
+          <span class="hint" id="cursor-pos"></span>
+        </div>
+        <div class="canvas-wrap" id="canvas-wrap">
+          <canvas id="editor-canvas" tabindex="0"></canvas>
+        </div>
+        <p class="hint center" id="orientation-disabled" hidden>Orientação desativada — não será exportada.</p>
+      </section>
+
+      <aside class="panel" id="inspector">
+        <section>
+          <h2>Orientação <span class="orient-name"></span></h2>
+          <p class="hint" id="mapping-size"></p>
+          <label class="check"><input id="orient-translucent" type="checkbox" /> translucent</label>
+          <h3>extendedEdges padrão</h3>
+          <div class="grid4" id="orient-edges"></div>
+        </section>
+
+        <section>
+          <h2>Adicionar botão</h2>
+          <div class="row">
+            <select id="add-input"></select>
+            <button id="btn-add" type="button">Adicionar</button>
+          </div>
+        </section>
+
+        <section id="selection-panel">
+          <h2>Seleção</h2>
+          <p class="hint" id="selection-empty">Clique num botão ou tela no canvas. Arraste para mover (guias rosa mostram alinhamento; Alt desliga), alça no canto redimensiona, setas movem 1pt (Shift = 10pt ou o grid). Shift/Ctrl+clique ou arrastar no vazio seleciona vários; Ctrl+A seleciona todos os botões.</p>
+          <div id="selection-body" hidden></div>
+        </section>
+
+        <section>
+          <h2>Elementos</h2>
+          <ul id="element-list" class="element-list"></ul>
+        </section>
+      </aside>
+    </main>
+
+    <div id="toast" class="toast" hidden></div>
+
+    <script src="vendor/jszip.min.js"></script>
+    <script src="vendor/jspdf.umd.min.js"></script>
+    <script src="js/devices.js"></script>
+    <script src="js/consoles.js"></script>
+    <script src="js/filters.js"></script>
+    <script src="js/layout.js"></script>
+    <script src="js/skinjson.js"></script>
+    <script src="js/render.js"></script>
+    <script src="js/export.js"></script>
+    <script src="js/snap.js"></script>
+    <script src="js/editor.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>

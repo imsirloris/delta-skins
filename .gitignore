@@ -1,0 +1,6 @@
+# Third-party / exported skins
+*.deltaskin
+
+node_modules/
+.DS_Store
+Thumbs.db
