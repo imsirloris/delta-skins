@@ -4,12 +4,12 @@
   'use strict';
 
   const DEFAULT_STYLE = {
-    bg: '#2b2d42',
-    bg2: '#1b1c2b',
-    bezel: '#111219',
-    button: '#3d405b',
-    accent: '#ef233c',
-    text: '#edf2f4',
+    bg: '#181818',
+    bg2: '#101010',
+    bezel: '#0b0b0b',
+    button: '#252525',
+    accent: '#2e2e2e',
+    text: '#c0c1c4',
     landscapeOpacity: 0.55,
   };
 
@@ -49,7 +49,7 @@
     const cx = f.x + f.width / 2;
     const cy = f.y + f.height / 2;
     ctx.fillStyle = style.button;
-    ctx.strokeStyle = shade(style.button, 40);
+    ctx.strokeStyle = shade(style.button, 20);
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     const r = arm * 0.18;
@@ -135,7 +135,7 @@
     const input = Array.isArray(item.inputs) ? item.inputs[0] : '';
     const fill = ACCENT_INPUTS.has(input) ? style.accent : style.button;
     ctx.fillStyle = fill;
-    ctx.strokeStyle = shade(fill, 45);
+    ctx.strokeStyle = shade(fill, 20);
     ctx.lineWidth = 1.5;
     if (item.shape === 'circle') {
       ctx.beginPath();

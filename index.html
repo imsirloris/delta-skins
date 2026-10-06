@@ -1,18 +1,9 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-bs-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Delta Skin Generator</title>
-    <script>
-      // Follow the system light/dark preference with Bootstrap's color modes.
-      (function () {
-        const media = matchMedia('(prefers-color-scheme: dark)');
-        const apply = () => document.documentElement.setAttribute('data-bs-theme', media.matches ? 'dark' : 'light');
-        apply();
-        media.addEventListener('change', apply);
-      })();
-    </script>
     <link rel="stylesheet" href="vendor/bootstrap.min.css" />
     <link rel="stylesheet" href="css/style.css" />
   </head>
