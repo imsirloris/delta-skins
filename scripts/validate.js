@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 // Validates a .deltaskin (zip) or an info.json against the Delta skin spec.
 // Usage: node scripts/validate.js <file.deltaskin|info.json> [...]
-'use strict';
-
-const fs = require('fs');
-const path = require('path');
-const zlib = require('zlib');
-const { CONSOLES, allowedInputs } = require('../js/consoles.js');
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
+import { pathToFileURL } from 'node:url';
+import { CONSOLES, allowedInputs } from '../src/consoles.js';
 
 // Minimal zip reader (central directory + stored/deflate entries).
 function readZip(buffer) {
@@ -134,9 +133,9 @@ function validateFile(file) {
   return validateInfo(info, fileNames);
 }
 
-module.exports = { validateInfo, readZip };
+export { validateInfo, readZip };
 
-if (require.main === module) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const files = process.argv.slice(2);
   if (!files.length) {
     console.error('usage: node scripts/validate.js <file.deltaskin|info.json> [...]');

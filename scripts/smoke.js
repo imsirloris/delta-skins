@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 // Builds the standard and FlipPad layouts for every iPhone × console and validates the resulting info.json.
 // Usage: node scripts/smoke.js
-'use strict';
-
-const { DEVICES } = require('../js/devices.js');
-const { CONSOLES } = require('../js/consoles.js');
-const Layout = require('../js/layout.js');
-const { buildInfoJson } = require('../js/skinjson.js');
-const { validateInfo } = require('./validate.js');
+import { DEVICES } from '../src/devices.js';
+import { CONSOLES } from '../src/consoles.js';
+import * as Layout from '../src/layout.js';
+import { buildInfoJson } from '../src/skinjson.js';
+import { validateInfo } from './validate.js';
 
 const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 

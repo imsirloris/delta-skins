@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 // Unit checks for js/app/history.js (undo/redo stacks). Usage: node scripts/history-test.js
-'use strict';
-
-const assert = require('assert');
-const { History } = require('../js/app/history.js');
+import assert from 'node:assert';
+import { History } from '../src/app/history.js';
 
 // History over a plain counter: snapshot = its value as a string.
 function setup(limit) {

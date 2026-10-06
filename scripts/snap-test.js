@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 // Unit checks for js/snap.js. Usage: node scripts/snap-test.js
-'use strict';
-
-const assert = require('assert');
-const { computeSnap, alignFrames, distributeFrames, boundsOf } = require('../js/snap.js');
+import assert from 'node:assert';
+import { computeSnap, alignFrames, distributeFrames, boundsOf } from '../src/snap.js';
 
 const bounds = { width: 400, height: 800 };
 const base = { threshold: 6, bounds };

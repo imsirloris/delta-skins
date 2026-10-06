@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 // Unit checks for js/app/state.js (defaults, migrations, resets). Usage: node scripts/state-test.js
-'use strict';
-
-const assert = require('assert');
-const State = require('../js/app/state.js');
-const { DEFAULT_STYLE } = require('../js/render.js');
-const { getDevice } = require('../js/devices.js');
+import assert from 'node:assert';
+import * as State from '../src/app/state.js';
+import { DEFAULT_STYLE } from '../src/render.js';
+import { getDevice } from '../src/devices.js';
 
 const tests = {
   'default state is a GBA skin for the iPhone 17 Pro with an auto identifier'() {

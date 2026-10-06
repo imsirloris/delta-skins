@@ -1,0 +1,30 @@
+{
+  "name": "delta-skins",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Builds Delta emulator skins (.deltaskin) with the exact measurements of a specific iPhone.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "validate": "tsx scripts/validate.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "bootstrap": "^5.3.8",
+    "jspdf": "^4.2.1",
+    "jszip": "^3.10.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.3",
+    "vitest": "^5.0.3"
+  }
+}
