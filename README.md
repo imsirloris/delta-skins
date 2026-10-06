@@ -6,7 +6,7 @@ Segue a spec de <https://noah978.gitbook.io/delta-docs/skins> e os exemplos de f
 
 ## Como usar
 
-1. Abra `index.html` no navegador (funciona direto via `file://`, sem build nem servidor; as libs ficam em `vendor/`).
+1. Abra `index.html` no navegador (funciona direto via `file://`, sem build nem servidor; as libs ficam em `vendor/`). A interface usa o CSS do [Bootstrap](https://getbootstrap.com/) 5.3 e segue o tema claro ou escuro do sistema.
 2. Escolha o **iPhone** e o **console** (GBC, GBA, NES, SNES, N64, DS, Genesis). Um layout padrão é gerado para retrato e paisagem.
    - **Regenerar layout** cria o layout padrão, com todos os botões na tela.
    - **FlipPad layout** é para o controle FlipPad, que cobre a parte de baixo da tela em retrato. Retrato fica só com a tela do jogo e os botões do Delta, no estilo da skin GBA `ekwipt_graphite`: rótulos MENU, SAVE, LOAD e FFW espaçados, logo acima da área coberta (que começa em 550pt no iPhone 17 Pro). A tela do jogo fica centralizada entre a safe area de cima e os botões. No DS, as duas telas ocupam todo o espaço. Nos outros iPhones, tudo é escalado pela largura. O editor mostra hachurada a área coberta pelo controle. Paisagem usa o layout padrão. Trocar iPhone ou console mantém o tipo de layout escolhido.
