@@ -1,5 +1,125 @@
 /* Layout on top of Bootstrap (vendor/bootstrap.min.css); colors come from its --bs-* variables. */
 
+/* Palette from the 8BitDo FlipPad black matte skin: matte black background, #252525 buttons,
+   light gray (#c0c1c4) icons and labels. The app is always dark (data-bs-theme="dark"). */
+[data-bs-theme="dark"] {
+  --bs-body-bg: #1a1a1a;
+  --bs-body-bg-rgb: 26, 26, 26;
+  --bs-secondary-bg: #141414;
+  --bs-secondary-bg-rgb: 20, 20, 20;
+  --bs-tertiary-bg: #1a1a1a;
+  --bs-tertiary-bg-rgb: 26, 26, 26;
+  --bs-body-color: #c0c1c4;
+  --bs-body-color-rgb: 192, 193, 196;
+  --bs-emphasis-color: #e6e7e9;
+  --bs-emphasis-color-rgb: 230, 231, 233;
+  --bs-secondary-color: #8a8b8e;
+  --bs-border-color: #303030;
+  --bs-primary: #c0c1c4;
+  --bs-primary-rgb: 192, 193, 196;
+  --bs-link-color: #c0c1c4;
+  --bs-link-color-rgb: 192, 193, 196;
+  --bs-link-hover-color: #e6e7e9;
+  --bs-link-hover-color-rgb: 230, 231, 233;
+  --bs-focus-ring-color: rgba(192, 193, 196, 0.25);
+}
+
+.btn-outline-secondary,
+.btn-outline-primary,
+.btn-outline-danger {
+  --bs-btn-color: #c0c1c4;
+  --bs-btn-bg: #252525;
+  --bs-btn-border-color: #383838;
+  --bs-btn-hover-color: #e6e7e9;
+  --bs-btn-hover-bg: #2e2e2e;
+  --bs-btn-hover-border-color: #484848;
+  --bs-btn-focus-shadow-rgb: 192, 193, 196;
+  --bs-btn-active-color: #141414;
+  --bs-btn-active-bg: #c0c1c4;
+  --bs-btn-active-border-color: #c0c1c4;
+  --bs-btn-disabled-color: #c0c1c4;
+  --bs-btn-disabled-bg: #252525;
+  --bs-btn-disabled-border-color: #383838;
+}
+
+/* Destructive buttons keep the gray face; only the text turns red. */
+.btn-outline-danger {
+  --bs-btn-color: #e5534b;
+  --bs-btn-hover-color: #ff6b63;
+  --bs-btn-hover-border-color: #e5534b;
+  --bs-btn-active-color: #ffffff;
+  --bs-btn-active-bg: #e5534b;
+  --bs-btn-active-border-color: #e5534b;
+}
+
+.btn-primary {
+  --bs-btn-color: #141414;
+  --bs-btn-bg: #c0c1c4;
+  --bs-btn-border-color: #c0c1c4;
+  --bs-btn-hover-color: #141414;
+  --bs-btn-hover-bg: #d4d5d8;
+  --bs-btn-hover-border-color: #d4d5d8;
+  --bs-btn-focus-shadow-rgb: 192, 193, 196;
+  --bs-btn-active-color: #141414;
+  --bs-btn-active-bg: #e6e7e9;
+  --bs-btn-active-border-color: #e6e7e9;
+  --bs-btn-disabled-color: #141414;
+  --bs-btn-disabled-bg: #c0c1c4;
+  --bs-btn-disabled-border-color: #c0c1c4;
+}
+
+.form-control,
+.form-select {
+  background-color: #101010;
+}
+
+.form-control:focus,
+.form-select:focus,
+.form-check-input:focus {
+  background-color: #101010;
+  border-color: #5a5a5a;
+  box-shadow: 0 0 0 0.25rem rgba(192, 193, 196, 0.25);
+}
+
+.form-check-input:checked {
+  background-color: #c0c1c4;
+  border-color: #c0c1c4;
+}
+
+.form-check-input:checked[type="checkbox"] {
+  --bs-form-check-bg-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23141414' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e");
+}
+
+.form-range::-webkit-slider-thumb {
+  background-color: #c0c1c4;
+}
+
+.form-range::-webkit-slider-thumb:active {
+  background-color: #e6e7e9;
+}
+
+.form-range::-moz-range-thumb {
+  background-color: #c0c1c4;
+}
+
+.form-range::-moz-range-thumb:active {
+  background-color: #e6e7e9;
+}
+
+.form-range:focus::-webkit-slider-thumb {
+  box-shadow: 0 0 0 1px #1a1a1a, 0 0 0 0.25rem rgba(192, 193, 196, 0.25);
+}
+
+.form-range:focus::-moz-range-thumb {
+  box-shadow: 0 0 0 1px #1a1a1a, 0 0 0 0.25rem rgba(192, 193, 196, 0.25);
+}
+
+.element-list {
+  --bs-list-group-active-color: #141414;
+  --bs-list-group-active-bg: #c0c1c4;
+  --bs-list-group-active-border-color: #c0c1c4;
+}
+
 [hidden] {
   display: none !important;
 }

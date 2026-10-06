@@ -15,6 +15,8 @@
   const STORAGE_KEY = 'delta-skin-generator:v1';
   const VIEW_KEY = 'delta-skin-generator:view';
   const ORIENT_LABEL = { portrait: 'Retrato', landscape: 'Paisagem' };
+  // Default art colors before the 8BitDo black matte palette; projects still on them get the new defaults.
+  const LEGACY_STYLE = { bg: '#2b2d42', bg2: '#1b1c2b', bezel: '#111219', button: '#3d405b', accent: '#ef233c', text: '#edf2f4' };
   const $ = (id) => document.getElementById(id);
 
   // ---- state ------------------------------------------------------------
@@ -65,6 +67,14 @@
     }
   }
 
+  function upgradeStyle(state) {
+    const style = state && state.style;
+    if (style && Object.entries(LEGACY_STYLE).every(([k, v]) => style[k] === v)) {
+      state.style = { ...DEFAULT_STYLE, landscapeOpacity: style.landscapeOpacity ?? DEFAULT_STYLE.landscapeOpacity };
+    }
+    return state;
+  }
+
   // Editor view preferences (not part of the project file).
   function loadView() {
     const view = { guides: true, grid: { show: false, snap: false, size: 8 } };
@@ -86,7 +96,7 @@
   }
 
   const app = {
-    state: loadSaved() || defaultState(),
+    state: upgradeStyle(loadSaved()) || defaultState(),
     ui: { orientation: 'portrait', selection: [], showSafe: true, showDebug: true, ...loadView() },
     images: {},
     current() {
@@ -1008,7 +1018,7 @@
       try {
         const data = JSON.parse(await file.text());
         if (!data.orientations || !data.device || !CONSOLES[data.consoleId]) throw new Error('arquivo não é um projeto');
-        app.state = { ...defaultState(), ...data };
+        app.state = upgradeStyle({ ...defaultState(), ...data });
         Layout.bumpIds(Object.values(app.state.orientations));
         app.ui.selection = [];
         await loadImages();
