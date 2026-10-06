@@ -32,24 +32,20 @@ The app UI and the default skin colors use the FlipPad black matte palette: a ma
 
 ## Getting started
 
-There is nothing to build or install. The app is plain HTML, CSS and JavaScript, and the libraries it uses (Bootstrap 5.3, JSZip, jsPDF) are in `vendor/`.
+Open the app at <https://imsirloris.github.io/delta-skins/>. It runs entirely in your browser: nothing is uploaded, and projects autosave to your browser's storage.
 
-**Option 1: open the file.** Double-click `index.html`, or open it from your browser's File menu. It works over `file://`.
-
-**Option 2: serve the folder.** Use this if your browser restricts `file://` pages:
+To run it locally you need [Node.js](https://nodejs.org) 20 or later:
 
 ```sh
 git clone https://github.com/imsirloris/delta-skins.git
 cd delta-skins
-python3 -m http.server 8000   # or: npx serve .
+npm install
+npm run dev
 ```
 
-Then open <http://localhost:8000>.
+Then open the address Vite prints (by default <http://localhost:5173/delta-skins/>).
 
-Requirements:
-
-- A recent Chrome, Edge, Firefox or Safari.
-- Node.js 18 or later, only if you want to run the scripts in [Development](#development).
+The app needs a recent Chrome, Edge, Firefox or Safari. Opening `index.html` directly from disk does not work, because the source is TypeScript that Vite compiles.
 
 ## Quick start: a FlipPad skin
 
@@ -125,39 +121,47 @@ The project autosaves to your browser's `localStorage`. Large background images 
 
 ## Development
 
-The Node scripts load the same modules as the browser (the pure ones are UMD), so you can check layouts and exports without a browser:
+The app is TypeScript bundled with [Vite](https://vite.dev). Bootstrap 5.3, JSZip and jsPDF come from npm.
 
 ```sh
-node scripts/smoke.js                          # builds and validates every iPhone × console × layout
-node scripts/snap-test.js                      # guides, grid, align and distribute
-node scripts/state-test.js                     # project defaults, migrations and resets
-node scripts/history-test.js                   # undo/redo stacks
-node scripts/validate.js my-skin.deltaskin     # validates info.json and the assets in a .deltaskin
+npm run dev                                   # dev server with hot reload
+npm run typecheck                             # strict type check of the app, tests and scripts
+npm test                                      # Vitest: every iPhone × console × layout, snapping, state, undo/redo
+npm run build                                 # type check, then build the static site into dist/
+npm run preview                               # serve dist/ as GitHub Pages would
+npm run validate -- my-skin.deltaskin         # validates info.json and the assets in a .deltaskin
 ```
 
-There is no bundler or ES modules: each file is a script that registers a `Delta*` global, so the app keeps working over `file://`. `index.html` loads them in dependency order.
+The pure modules (layouts, `info.json`, state, snapping) have no DOM, so the tests and the validator run them in Node.
+
+### Deployment
+
+`.github/workflows/deploy.yml` runs the type check, the tests and the build on every push and pull request. Pushes to `main` publish `dist/` to GitHub Pages, which needs **Settings > Pages > Source** set to **GitHub Actions**. The site is served from `/delta-skins/`, set as `base` in `vite.config.ts`; change it there if the site moves (to `/` for a custom domain).
 
 ### Project structure
 
 | File | Role |
 | --- | --- |
-| `js/devices.js` | iPhone presets (points, scale, pixels, safe areas) |
-| `js/consoles.js` | `gameTypeIdentifier`, `inputFrame` and valid buttons of each console |
-| `js/filters.js` | CoreImage filter presets |
-| `js/layout.js` | Standard and FlipPad layouts, in points |
-| `js/skinjson.js` | Builds `info.json` (also used by the Node scripts) |
-| `js/render.js` | Draws the skin artwork on a canvas |
-| `js/export.js` | Renders PDF/PNG assets and packs the `.deltaskin` |
-| `js/importer.js` | Imports a `.deltaskin` (converts measurements, extracts PNG/PDF artwork) |
-| `js/snap.js` | Smart guides, grid, align and distribute |
-| `js/refs.js` | Selection references shared by the editor and the inspector |
-| `js/editor-overlays.js` | Editor-only drawings (grid, safe area, FlipPad cover, selection, guides) |
-| `js/editor.js` | Canvas interaction (selection, drag, resize, keyboard) |
-| `js/app/state.js` | Project defaults, migrations of older saves, pure state helpers |
-| `js/app/storage.js` | `localStorage` persistence and the debounced autosave |
-| `js/app/history.js` | Undo/redo stacks |
-| `js/app/images.js` | Reading and decoding background images |
-| `js/app/dom.js` | DOM helpers shared by the views (element builder, fields, toast) |
-| `js/app/project.js` | Project use cases: layouts, iPhone/console changes, import, open, resets |
-| `js/app/views/*.js` | Sidebar, stage, inspector and top bar views |
-| `js/app/main.js` | Composition root that wires everything together |
+| `src/types.ts` | Data model: project state, presets, editor context and Delta's `info.json` |
+| `src/devices.ts` | iPhone presets (points, scale, pixels, safe areas) |
+| `src/consoles.ts` | `gameTypeIdentifier`, `inputFrame` and valid buttons of each console |
+| `src/filters.ts` | CoreImage filter presets |
+| `src/layout.ts` | Standard and FlipPad layouts, in points |
+| `src/skinjson.ts` | Builds `info.json` (also used by the tests and the validator) |
+| `src/render.ts` | Draws the skin artwork on a canvas |
+| `src/export.ts` | Renders PDF/PNG assets and packs the `.deltaskin` |
+| `src/importer.ts` | Imports a `.deltaskin` (converts measurements, extracts PNG/PDF artwork) |
+| `src/snap.ts` | Smart guides, grid, align and distribute |
+| `src/refs.ts` | Selection references shared by the editor and the inspector |
+| `src/editor-overlays.ts` | Editor-only drawings (grid, safe area, FlipPad cover, selection, guides) |
+| `src/editor.ts` | Canvas interaction (selection, drag, resize, keyboard) |
+| `src/app/state.ts` | Project defaults, migrations of older saves, pure state helpers |
+| `src/app/storage.ts` | `localStorage` persistence and the debounced autosave |
+| `src/app/history.ts` | Undo/redo stacks |
+| `src/app/images.ts` | Reading and decoding background images |
+| `src/app/dom.ts` | DOM helpers shared by the views (element builder, fields, toast) |
+| `src/app/project.ts` | Project use cases: layouts, iPhone/console changes, import, open, resets |
+| `src/app/views/*.ts` | Sidebar, stage, inspector and top bar views |
+| `src/app/main.ts` | Composition root that wires everything together |
+| `tests/*.test.ts` | Vitest suites |
+| `scripts/validate.ts` | `.deltaskin` / `info.json` validator (CLI and tests) |
