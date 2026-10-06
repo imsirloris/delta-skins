@@ -321,22 +321,40 @@
   // ---- FlipPad layout ------------------------------------------------------------
   // For the FlipPad controller, which physically covers the lower part of the screen in
   // portrait: only the game screen(s) and Delta's app buttons are drawn; the controller
-  // provides the game buttons. Taken from "minha-skin-ds.project (4).json" (DS on an
-  // iPhone 17 Pro, 402×874pt, safe top 62pt) and scaled to other iPhones by width.
+  // provides the game buttons. Measurements come from the "ekwipt_graphite" GBA FlipPad
+  // skin (iPhone 17 Pro, 402×874pt, safe top 62pt) and are scaled to other iPhones by width.
   const FLIPPAD_BASE = {
     width: 402,
     safeTop: 62,
-    dsScreens: [
-      { x: 45, y: 64, width: 311, height: 233 },
-      { x: 45, y: 298, width: 311, height: 233 },
-    ],
+    // Where the controller starts covering the screen.
+    coverTop: 550,
+    // Delta buttons in the reference skin's style: a row of spaced-out text labels
+    // (MENU / SAVE / LOAD / FFW) sitting right above the covered area.
+    buttonGap: 4, // between the buttons and the covered area
+    buttonWidth: 76,
+    buttonHeight: 30,
     buttons: [
-      { input: 'menu', frame: { x: 45, y: 560, width: 50, height: 50 } },
-      { input: 'quickSave', frame: { x: 132, y: 560, width: 50, height: 50 } },
-      { input: 'toggleFastForward', frame: { x: 219, y: 560, width: 50, height: 50 } },
-      { input: 'quickLoad', frame: { x: 306, y: 560, width: 50, height: 50 } },
+      { input: 'menu', label: 'MENU', cx: 53 },
+      { input: 'quickSave', label: 'SAVE', cx: 148 },
+      { input: 'quickLoad', label: 'LOAD', cx: 247.5 },
+      { input: 'toggleFastForward', label: 'FFW', cx: 351.5 },
     ],
+    // Minimum space between the game screen(s) and the buttons / safe-area top. DS screens
+    // fill everything above the buttons; single screens are centered in that space, 8pt
+    // from the sides.
+    screenGap: 8,
+    screenMargin: 8,
   };
+
+  // Base-layout y (402pt wide iPhone) -> target device, keeping the offset from the safe top.
+  function flipPadY(device, y) {
+    const s = device.points.w / FLIPPAD_BASE.width;
+    return device.safe.portrait.top + (y - FLIPPAD_BASE.safeTop) * s;
+  }
+
+  function flipPadCoverTop(device) {
+    return Math.round(flipPadY(device, FLIPPAD_BASE.coverTop));
+  }
 
   function buildFlipPadLayout(device, consoleId, orientation) {
     // The FlipPad is only used in portrait; landscape keeps the regular layout.
@@ -348,29 +366,39 @@
     const H = mappingSize.height;
     const safe = device.safe.portrait;
     const s = W / FLIPPAD_BASE.width;
-    // Same offset from the safe-area top as the base layout, scaled by width.
-    const place = (f) => rect(f.x * s, safe.top + (f.y - FLIPPAD_BASE.safeTop) * s, f.width * s, f.height * s);
+    const coverTop = flipPadY(device, FLIPPAD_BASE.coverTop);
+    const buttonH = FLIPPAD_BASE.buttonHeight * s;
+    const buttonY = coverTop - FLIPPAD_BASE.buttonGap * s - buttonH;
+    const base = Math.round(buttonY - FLIPPAD_BASE.screenGap * s);
+    const margin = FLIPPAD_BASE.screenMargin * s;
+    const aspect = screenAspect(con);
 
-    const [top, bottom] = FLIPPAD_BASE.dsScreens.map(place);
+    // Screen(s) as large as possible between the safe top and the base line.
     let frames;
     if (con.dualScreen) {
-      frames = [top, bottom];
-    } else {
-      // Single screen: as large as possible, bottom edge on the DS bottom screen's base.
-      const base = bottom.y + bottom.height;
-      const size = fit(screenAspect(con), W, base - safe.top);
+      const size = fit(aspect, W - margin * 2, (base - safe.top) / 2);
       const width = Math.floor(size.w);
       const height = Math.floor(size.h);
-      frames = [rect((W - width) / 2, base - height, width, height)];
+      const x = (W - width) / 2;
+      frames = [rect(x, base - height * 2, width, height), rect(x, base - height, width, height)];
+    } else {
+      // Single screen: centered between the safe-area top and the buttons, keeping at
+      // least `screenGap` above and below.
+      const gap = FLIPPAD_BASE.screenGap * s;
+      const size = fit(aspect, W - margin * 2, buttonY - safe.top - gap * 2);
+      const width = Math.floor(size.w);
+      const height = Math.floor(size.h);
+      frames = [rect((W - width) / 2, safe.top + (buttonY - safe.top - height) / 2, width, height)];
     }
 
+    const buttonW = FLIPPAD_BASE.buttonWidth * s;
     const items = FLIPPAD_BASE.buttons.map((b) => ({
       id: newId(),
       kind: 'button',
       inputs: [b.input],
-      label: defaultLabel(b.input),
-      shape: 'circle',
-      frame: clampFrame(place(b.frame), W, H),
+      label: b.label,
+      shape: 'text',
+      frame: clampFrame(rect(b.cx * s - buttonW / 2, buttonY, buttonW, buttonH), W, H),
     }));
 
     const screens = makeScreens(con, frames);
@@ -441,7 +469,7 @@
     return input in LABELS ? LABELS[input] : input.toUpperCase();
   }
 
-  const api = { buildLayout, buildFlipPadLayout, buildLayoutKind, syncTouch, mappingSizeFor, newItem, newId, defaultLabel, bumpIds, DEFAULT_EDGES };
+  const api = { buildLayout, buildFlipPadLayout, buildLayoutKind, flipPadCoverTop, syncTouch, mappingSizeFor, newItem, newId, defaultLabel, bumpIds, DEFAULT_EDGES };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.DeltaLayout = api;
 })(typeof window !== 'undefined' ? window : globalThis);

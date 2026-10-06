@@ -10,6 +10,7 @@
   const { DEFAULT_STYLE } = root.DeltaRender;
   const { alignFrames, distributeFrames, boundsOf } = root.DeltaSnap;
   const Exporter = root.DeltaExport;
+  const DeltaImporter = root.DeltaImporter;
 
   const STORAGE_KEY = 'delta-skin-generator:v1';
   const VIEW_KEY = 'delta-skin-generator:view';
@@ -24,7 +25,10 @@
       out[o] = Layout.buildLayoutKind(kind || 'standard', device, consoleId, o);
       if (prev && prev[o]) {
         out[o].enabled = prev[o].enabled;
-        out[o].drawControls = prev[o].drawControls;
+        // Hidden controls only make sense over imported art, which a fresh layout drops.
+        if (prev[o].drawControls === false && app.images[o] && !(app.state.importSource || {}).artOrientations?.includes(o)) {
+          out[o].drawControls = false;
+        }
       }
     }
     return out;
@@ -125,11 +129,21 @@
   };
 
   let saveTimer = null;
+  let warnedQuota = false;
   function writeStorage() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(app.state));
     } catch (_) {
-      // Quota exceeded (large background images) — project file save still works.
+      // Quota exceeded by large background images: keep at least the layout.
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...app.state, bgImages: {} }));
+      } catch (__) {
+        // Storage unavailable — project file save still works.
+      }
+      if (!warnedQuota) {
+        warnedQuota = true;
+        toast('Imagem grande demais para o salvamento automático; use "Salvar projeto" para guardar a arte.');
+      }
     }
   }
 
@@ -221,9 +235,39 @@
     return `com.deltaskin.${app.state.consoleId}.${slug(app.state.name).replace(/-/g, '')}.${app.state.deviceId.replace(/-/g, '')}`;
   }
 
+  // Leaving an imported layout drops its artwork too: it no longer matches the frames.
+  function leaveImport() {
+    const imp = app.state.importSource;
+    if (!imp) return;
+    for (const o of imp.artOrientations || []) {
+      delete app.state.bgImages[o];
+      delete app.images[o];
+    }
+    app.state.importSource = null;
+  }
+
+  // Imported skin converted to the current iPhone; orientations it lacks get the standard layout.
+  function importedOrientations(imp, prev) {
+    const result = DeltaImporter.convertInfo(imp.info, app.state.device);
+    const out = freshOrientations(app.state.device, result.consoleId, prev, 'standard');
+    for (const o of Object.keys(result.orientations)) out[o] = result.orientations[o];
+    if (result.warnings.length) toast(result.warnings.join(' '));
+    return out;
+  }
+
   // kind: 'standard' | 'flippad'; omitted keeps the current one (device/console changes).
   function relayout(kind) {
     if (kind) app.state.layoutKind = kind;
+    if (app.state.layoutKind === 'imported' && app.state.importSource) {
+      app.state.orientations = importedOrientations(app.state.importSource, app.state.orientations);
+      app.state.layoutEdited = false;
+      app.ui.selection = [];
+      renderAll();
+      scheduleSave();
+      return;
+    }
+    if (app.state.layoutKind === 'imported') app.state.layoutKind = 'standard';
+    leaveImport();
     const current = app.state.layoutKind || 'standard';
     app.state.orientations = freshOrientations(app.state.device, app.state.consoleId, app.state.orientations, current);
     app.state.layoutEdited = false;
@@ -359,6 +403,8 @@
         return;
       }
       app.state.consoleId = consoleSelect.value;
+      // An imported skin belongs to its console; switching console starts from the standard layout.
+      if (app.state.layoutKind === 'imported') app.state.layoutKind = 'standard';
       if (app.state.name === `Minha Skin ${CONSOLES[prev].id.toUpperCase()}`) {
         app.state.name = `Minha Skin ${consoleSelect.value.toUpperCase()}`;
       }
@@ -485,12 +531,15 @@
     $('safe-l-right').value = d.safe.landscape.right;
     $('safe-l-bottom').value = d.safe.landscape.bottom;
     $('console-select').value = s.consoleId;
-    const flippad = s.layoutKind === 'flippad';
-    $('btn-relayout').classList.toggle('active', !flippad);
-    $('btn-flippad').classList.toggle('active', flippad);
-    $('layout-kind').textContent = flippad
-      ? 'Layout FlipPad: retrato só com a tela e os botões do Delta (o controle cobre a parte de baixo). Paisagem usa o layout padrão. Trocar iPhone/console mantém o FlipPad.'
-      : 'Layout padrão: todos os botões na tela.';
+    const kind = s.layoutKind || 'standard';
+    $('btn-relayout').classList.toggle('active', kind === 'standard');
+    $('btn-flippad').classList.toggle('active', kind === 'flippad');
+    $('layout-kind').textContent = {
+      standard: 'Layout padrão: todos os botões na tela.',
+      flippad:
+        'Layout FlipPad: retrato só com a tela e os botões do Delta; a área hachurada fica coberta pelo controle. Paisagem usa o layout padrão. Trocar iPhone/console mantém o FlipPad.',
+      imported: `Layout importado de "${(s.importSource && s.importSource.fileName) || 'skin'}": medidas convertidas para este iPhone e arte original como fundo. Mover elementos não move o desenho. Trocar o iPhone reconverte.`,
+    }[kind];
     $('skin-name').value = s.name;
     $('skin-identifier').value = s.identifier;
     $('skin-debug').checked = s.debug;
@@ -763,7 +812,7 @@
       const hasIcon = item.inputs.length === 1 && item.inputs[0] in root.DeltaRender.ICONS;
       nodes.push(el('label', {}, hasIcon ? 'Rótulo na arte (vazio = ícone)' : 'Rótulo na arte', labelInput));
 
-      const shape = el('select', {}, ...['circle', 'pill', 'rect'].map((s) => el('option', { value: s, selected: item.shape === s }, s)));
+      const shape = el('select', {}, ...['circle', 'pill', 'rect', 'text'].map((s) => el('option', { value: s, selected: item.shape === s }, s)));
       shape.addEventListener('change', () => {
         item.shape = shape.value;
         panelChanged();
@@ -912,6 +961,37 @@
     $('btn-save-project').addEventListener('click', () => {
       const blob = new Blob([JSON.stringify(app.state)], { type: 'application/json' });
       Exporter.download(blob, `${slug(app.state.name)}.project.json`);
+    });
+    $('input-import-skin').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      if (!confirmRelayout()) return;
+      try {
+        const result = await DeltaImporter.importDeltaSkin(file, app.state.device);
+        leaveImport();
+        app.state.consoleId = result.consoleId;
+        app.state.name = result.name;
+        if (app.state.identifierAuto) app.state.identifier = autoIdentifier();
+        app.state.layoutKind = 'imported';
+        app.state.importSource = { fileName: file.name, info: result.info, artOrientations: Object.keys(result.images) };
+        app.state.orientations = freshOrientations(app.state.device, result.consoleId, app.state.orientations, 'standard');
+        for (const o of Object.keys(result.orientations)) app.state.orientations[o] = result.orientations[o];
+        for (const [o, src] of Object.entries(result.images)) app.state.bgImages[o] = src;
+        app.state.layoutEdited = false;
+        app.ui.selection = [];
+        app.ui.orientation = result.orientations.portrait ? 'portrait' : 'landscape';
+        await loadImages();
+        renderAll();
+        scheduleSave();
+        const missing = ['portrait', 'landscape'].filter((o) => !result.orientations[o]);
+        const notes = [...result.warnings];
+        if (missing.length) notes.push(`Sem ${missing.map((o) => ORIENT_LABEL[o].toLowerCase()).join(' e ')} na skin: usei o layout padrão.`);
+        toast(`Skin importada (${CONSOLES[result.consoleId].name}). ${notes.join(' ')}`);
+      } catch (err) {
+        console.error(err);
+        toast(`Não consegui importar: ${err.message}`);
+      }
     });
     $('input-open-project').addEventListener('change', async (e) => {
       const file = e.target.files[0];

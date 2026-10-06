@@ -97,8 +97,41 @@
     ctx.setLineDash([]);
   }
 
+  // Wide-tracked uppercase label (FlipPad style: MENU / SAVE / LOAD / FFW), no button body.
+  function drawTextButton(ctx, item, style) {
+    const f = item.frame;
+    const text = item.label || '';
+    if (!text) return;
+    let size = f.height * 0.45;
+    const font = (px) => `800 ${px}px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
+    const tracking = 0.32;
+    const measure = () => {
+      ctx.font = font(size);
+      const chars = [...text].map((c) => ctx.measureText(c).width);
+      return { chars, total: chars.reduce((a, b) => a + b, 0) + size * tracking * (chars.length - 1) };
+    };
+    let m = measure();
+    if (m.total > f.width * 0.95) {
+      size *= (f.width * 0.95) / m.total;
+      m = measure();
+    }
+    ctx.save();
+    ctx.fillStyle = style.text;
+    ctx.globalAlpha *= 0.85;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    let x = f.x + (f.width - m.total) / 2;
+    const y = f.y + f.height / 2 + size * 0.04;
+    [...text].forEach((c, i) => {
+      ctx.fillText(c, x, y);
+      x += m.chars[i] + size * tracking;
+    });
+    ctx.restore();
+  }
+
   function drawButton(ctx, item, style) {
     const f = item.frame;
+    if (item.shape === 'text') return drawTextButton(ctx, item, style);
     const input = Array.isArray(item.inputs) ? item.inputs[0] : '';
     const fill = ACCENT_INPUTS.has(input) ? style.accent : style.button;
     ctx.fillStyle = fill;

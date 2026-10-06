@@ -18,6 +18,10 @@
           Abrir projeto
           <input id="input-open-project" type="file" accept=".json,application/json" hidden />
         </label>
+        <label class="button" title="Usar uma .deltaskin existente como base (medidas convertidas para o iPhone escolhido + arte)">
+          Importar .deltaskin
+          <input id="input-import-skin" type="file" accept=".deltaskin,.zip,application/zip" hidden />
+        </label>
         <button id="btn-info-json" type="button">Baixar info.json</button>
         <button id="btn-export" type="button" class="primary">Exportar .deltaskin</button>
       </div>
@@ -162,6 +166,7 @@
     <script src="js/skinjson.js"></script>
     <script src="js/render.js"></script>
     <script src="js/export.js"></script>
+    <script src="js/importer.js"></script>
     <script src="js/snap.js"></script>
     <script src="js/editor.js"></script>
     <script src="js/app.js"></script>

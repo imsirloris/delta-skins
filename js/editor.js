@@ -312,6 +312,7 @@
       this.drawScreenLabels(ctx, orient);
       if (ui.grid && ui.grid.show) this.drawGrid(ctx, orient);
       if (ui.showSafe) this.drawSafeArea(ctx, orient);
+      if (state.layoutKind === 'flippad' && ui.orientation === 'portrait') this.drawFlipPadCover(ctx, orient);
       if (ui.showDebug) this.drawTouchAreas(ctx, orient);
       this.drawSelection(ctx);
       this.drawGuides(ctx);
@@ -376,6 +377,42 @@
         ctx.fillRect(ms.width - safe.right, 0, safe.right, ms.height);
         ctx.fillRect(0, ms.height - safe.bottom, ms.width, safe.bottom);
       }
+      ctx.restore();
+    }
+
+    // Hatched area hidden under the FlipPad controller (editor-only hint, never exported).
+    drawFlipPadCover(ctx, orient) {
+      const top = root.DeltaLayout.flipPadCoverTop(this.app.state.device);
+      const ms = orient.mappingSize;
+      const h = ms.height - top;
+      if (h <= 0) return;
+      ctx.save();
+      ctx.fillStyle = 'rgba(20, 20, 24, 0.55)';
+      ctx.fillRect(0, top, ms.width, h);
+      ctx.beginPath();
+      ctx.rect(0, top, ms.width, h);
+      ctx.clip();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      for (let x = -h; x < ms.width; x += 22) {
+        ctx.moveTo(x, top + h);
+        ctx.lineTo(x + h, top);
+      }
+      ctx.stroke();
+      ctx.restore();
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 170, 60, 0.9)';
+      ctx.lineWidth = 1.5 / this.viewScale;
+      ctx.setLineDash([6 / this.viewScale, 4 / this.viewScale]);
+      ctx.beginPath();
+      ctx.moveTo(0, top);
+      ctx.lineTo(ms.width, top);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255, 190, 90, 0.95)';
+      ctx.font = '600 12px -apple-system, "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Área coberta pelo FlipPad', ms.width / 2, top + 22);
       ctx.restore();
     }
 

@@ -9,7 +9,8 @@ Segue a spec de <https://noah978.gitbook.io/delta-docs/skins> e os exemplos de f
 1. Abra `index.html` no navegador (funciona direto via `file://`, sem build nem servidor; as libs ficam em `vendor/`).
 2. Escolha o **iPhone** e o **console** (GBC, GBA, NES, SNES, N64, DS, Genesis). Um layout padrão é gerado para retrato e paisagem.
    - **Regenerar layout** cria o layout padrão, com todos os botões na tela.
-   - **FlipPad layout** é para o controle FlipPad, que cobre a parte de baixo da tela em retrato. Retrato fica só com a tela do jogo e os botões do Delta (menu, quick save, toggle fast forward, quick load). A base da tela do jogo fica alinhada com a base da Tela 2 do DS. Paisagem usa o layout padrão. O modelo vem de `minha-skin-ds.project (4).json` (iPhone 17 Pro) e é escalado pela largura dos outros iPhones. Trocar iPhone ou console mantém o tipo de layout escolhido.
+   - **FlipPad layout** é para o controle FlipPad, que cobre a parte de baixo da tela em retrato. Retrato fica só com a tela do jogo e os botões do Delta, no estilo da skin GBA `ekwipt_graphite`: rótulos MENU, SAVE, LOAD e FFW espaçados, logo acima da área coberta (que começa em 550pt no iPhone 17 Pro). A tela do jogo fica centralizada entre a safe area de cima e os botões. No DS, as duas telas ocupam todo o espaço. Nos outros iPhones, tudo é escalado pela largura. O editor mostra hachurada a área coberta pelo controle. Paisagem usa o layout padrão. Trocar iPhone ou console mantém o tipo de layout escolhido.
+   - **Importar .deltaskin** usa uma skin existente como base. As telas, os botões e os filtros são convertidos para os pontos do iPhone escolhido, e a arte original (PNG, ou a imagem de dentro do PDF) vira o fundo. Trocar o iPhone reconverte a skin. A arte já tem os botões desenhados, então mover elementos no editor não move o desenho. Orientações que a skin não tem recebem o layout padrão. Skins com arte vetorial em PDF não são suportadas.
 3. Ajuste no canvas: arraste para mover, use a alça no canto para redimensionar e as setas para mover 1pt (Shift move 10pt). As telas mantêm a proporção do `inputFrame`; segure Shift para ignorar a proporção.
 4. Edite inputs, `extendedEdges` e filtros CoreImage das telas no painel da direita.
    - **Guias**: ao arrastar, o elemento gruda nas bordas e nos centros dos outros elementos e no centro da skin. Linhas rosa mostram o alinhamento. Segure **Alt** para mover livre.
@@ -55,4 +56,5 @@ node scripts/snap-test.js                       # testa guias, grid, alinhar e d
 | `js/snap.js` | guias inteligentes, grid, alinhar e distribuir |
 | `js/editor.js` | edição no canvas (seleção múltipla, arrastar, redimensionar) |
 | `js/export.js` | gera PDF/PNG e empacota o `.deltaskin` |
+| `js/importer.js` | importa `.deltaskin` (converte medidas e extrai a arte de PNG/PDF) |
 | `js/app.js` | estado do app e interface |
